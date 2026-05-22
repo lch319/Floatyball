@@ -1,16 +1,16 @@
 ﻿; 编译exe文件信息及版本号设置
-当前工具版本:="1.0.2"                  ;设置版本号
+当前工具版本:="1.6.2"                  ;设置版本号
 ;@Ahk2Exe-Obey U_bits, = "%A_PtrSize%>4" ? "-64bit" : "-32bit"  ;判断位数
 ;@Ahk2Exe-Let U_version = %A_PriorLine~U)^(.+"){1}(.+)".*$~$2%  ;读取版本号以编译
-;@Ahk2Exe-SetMainIcon D:\RunAny\RunPlugins\XiaoYao_悬浮球\历史\图标合集\0_256.ico          ; 指定托盘图标文件
-;@Ahk2Exe-AddResource D:\RunAny\RunPlugins\XiaoYao_悬浮球\历史\图标合集\0_256.ico, 160      ; 替换自带的'蓝色H'图标
-;@Ahk2Exe-AddResource D:\RunAny\RunPlugins\XiaoYao_悬浮球\历史\图标合集\0_256.ico, 206      ; 替换为 '绿色 S'
-;@Ahk2Exe-AddResource D:\RunAny\RunPlugins\XiaoYao_悬浮球\历史\图标合集\0_256.ico, 207      ; 替换自带的'红色H'图标
-;@Ahk2Exe-AddResource D:\RunAny\RunPlugins\XiaoYao_悬浮球\历史\图标合集\0_256.ico, 208      ; 替换为 '红色 S'
+;@Ahk2Exe-SetMainIcon Floatyball.ico          ; 指定托盘图标文件
+;@Ahk2Exe-AddResource Floatyball.ico, 160      ; 替换自带的'蓝色H'图标
+;@Ahk2Exe-AddResource Floatyball.ico, 206      ; 替换为 '绿色 S'
+;@Ahk2Exe-AddResource Floatyball.ico, 207      ; 替换自带的'红色H'图标
+;@Ahk2Exe-AddResource Floatyball.ico, 208      ; 替换为 '红色 S'
 ;@Ahk2Exe-ExeName %A_ScriptDir%\Floatyball%U_version%.exe  ; 打包后的exe文件路径
-;@Ahk2Exe-SetCompanyName xiaoyao        ; 企业信息
-;@Ahk2Exe-SetCopyright xiaoyao          ; 版权信息
-;@Ahk2Exe-SetDescription 悬浮工具  ; 文件说明
+;@Ahk2Exe-SetCompanyName 逍遥xiaoyao        ; 企业信息
+;@Ahk2Exe-SetCopyright 逍遥xiaoyao          ; 版权信息
+;@Ahk2Exe-SetDescription 高度可自定义的多功能悬浮工具  ; 文件说明
 ;@Ahk2Exe-SetFileVersion %U_version%        ; 文件版本
 ;@Ahk2Exe-SetInternalName Floatyball        ; 文件内部名
 ;@Ahk2Exe-SetLanguage 0x0804            ; 区域语言
@@ -87,7 +87,7 @@ TimeFormat := StrReplace(TimeFormat, "\n", "`n")
 
 ; --- 文字样式设置 ---
 ; 字体名称：你电脑里安装的字体名，比如 "微软雅黑", "黑体", "Consolas"
-TimeFont := Var_Read("TimeFont","LESLIE","基础配置",A_ScriptDir "\Settings.ini","否")
+TimeFont := Var_Read("TimeFont","微软雅黑","基础配置",A_ScriptDir "\Settings.ini","否")
 
 ; 字体颜色：ARGB 格式（8位16进制）。前2位是透明度(FF=完全不透明，00=完全透明)，后6位是RGB颜色(如 FFFFFF 是纯白)
 TimeColor := Var_Read("TimeColor","FFFFFFFF","基础配置",A_ScriptDir "\Settings.ini","否")
@@ -2947,9 +2947,9 @@ ShowMainSettingsGUI:
 
     ; 新增 X/Y 坐标设置
     Gui, MainSettings: Add, Text, x200 y285 cWhite w60, X 坐标:
-    Gui, MainSettings: Add, Edit, x260 y280 w60 h25 vGUI_X cBlack, %GUI_X%
+    Gui, MainSettings: Add, Edit, x260 y280 w60 h25 vGUI_X2 cBlack, %GUI_X%
     Gui, MainSettings: Add, Text, x340 y285 cWhite w60, Y 坐标:
-    Gui, MainSettings: Add, Edit, x400 y280 w60 h25 vGUI_Y cBlack, %GUI_Y%
+    Gui, MainSettings: Add, Edit, x400 y280 w60 h25 vGUI_Y2 cBlack, %GUI_Y%
 
     ; --------------------------------------------------
     ; Tab 2: 行为与隐藏
@@ -3217,8 +3217,6 @@ CoreSaveMainSettings:
     Var_Set(v_EnableWheelResize, "1", "EnableWheelResize", section, iniPath)
     Var_Set(v_EnableHotkey, "1", "EnableHotkey", section, iniPath)
 
-    Var_Set(GUI_X, "", "GUI_X", section, iniPath)
-    Var_Set(GUI_Y, "", "GUI_Y", section, iniPath)
 
     Var_Set(v_IsAlwaysOnTop, "1", "IsAlwaysOnTop", section, iniPath)
     Var_Set(v_IsLocked, "0", "IsLocked", section, iniPath)
@@ -3261,6 +3259,11 @@ CoreSaveMainSettings:
     Var_Set(GUI_SelectedCopyKey, "^c", "SelectedCopyKey", section, iniPath)
     Var_Set(GUI_SelectedWaitTime, "0.15", "SelectedWaitTime", section, iniPath)
     Var_Set(GUI_MaxTempFiles, "10", "MaxTempFiles", section, iniPath)
+
+If (SavePosition = "0") {
+    Var_Set(GUI_X2, "", "GUI_X", section, iniPath)
+    Var_Set(GUI_Y2, "", "GUI_Y", section, iniPath)
+}
 
     Var_Set(GUI_CfgMgr_UserConfigDir, A_ScriptDir "\UserConfig", "UserConfigDir", "基础配置", iniPath)
     Var_Set(v_CfgMgr_EnableAutoBackup, "1", "EnableAutoBackup", "基础配置", iniPath)
