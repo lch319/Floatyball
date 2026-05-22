@@ -174,8 +174,8 @@ if !InStr(FileExist(CfgMgr_UserConfigDir "\backup"), "D")
 ; --- 悬浮球点击事件配置 ---
 ; 左键单击
 LBtn_Enable := Var_Read("启用","1","左键单击事件",A_ScriptDir "\Settings.ini","否")
-LBtn_Type   := Var_Read("功能类型","4","左键单击事件",A_ScriptDir "\Settings.ini","否")
-LBtn_Param  := Var_Read("功能参数","Menu_Show1","左键单击事件",A_ScriptDir "\Settings.ini","否","否")
+LBtn_Type   := Var_Read("功能类型","1","左键单击事件",A_ScriptDir "\Settings.ini","否")
+LBtn_Param  := Var_Read("功能参数","https://www.baidu.com/s?wd={$Selected_loop$}","左键单击事件",A_ScriptDir "\Settings.ini","否","否")
 LBtn_Enable_ctrl := Var_Read("启用_ctrl","1","左键单击事件",A_ScriptDir "\Settings.ini","否")
 LBtn_Type_ctrl   := Var_Read("功能类型_ctrl","1","左键单击事件",A_ScriptDir "\Settings.ini","否")
 LBtn_Param_ctrl  := Var_Read("功能参数_ctrl","","左键单击事件",A_ScriptDir "\Settings.ini","否","否")
@@ -257,7 +257,7 @@ DropText_Param_shift  := Var_Read("功能参数_shift","","拖放事件_文本",
 
 ; --- 环境初始化 ---
 #SingleInstance Force   ;~运行替换旧实例
-#Include *i %A_ScriptDir%\..\RunAny_ObjReg.ahk
+;#Include *i %A_ScriptDir%\..\RunAny_ObjReg.ahk
 #Include %A_ScriptDir%\lib\Gdip_All.ahk
 #Include %A_ScriptDir%\lib\Helper_function.ahk
 SetWinDelay, -1
@@ -3379,7 +3379,7 @@ ShowAboutGUI:
 
     ; 简介文本
     Gui, AboutGui: Font, s10 cAAAAAA w400
-    Gui, AboutGui: Add, Text, y+15 w360 vAboutDesc, 📝 简介：一款高度可自定义的多功能桌面悬浮工具，支持动作快捷触发、文件多重拖放与动态时间显示。
+    Gui, AboutGui: Add, Text, y+15 w360 vAboutDesc, 📝 简介：一款高度可自定义的多功能悬浮工具，支持动作快捷触发、文件多重拖放与动态时间显示。
 
     ; 作者与版本信息
     Gui, AboutGui: Font, s10 cWhite w400
@@ -3389,7 +3389,7 @@ ShowAboutGUI:
     ; Github 链接 (使用只读 Edit 控件方便复制)
     Gui, AboutGui: Add, Text, y+20 w360 vAboutGithubLabel, 🌐 GitHub 项目地址 (请直接框选复制):
     Gui, AboutGui: Font, s10 cBlack w400
-    Gui, AboutGui: Add, Edit, y+5 w360 h25 ReadOnly vAboutGithubLink, https://github.com/你的github用户名/Floatyball
+    Gui, AboutGui: Add, Edit, y+5 w360 h25 ReadOnly vAboutGithubLink, https://github.com/lch319/Floatyball
 
     ; 初始居中显示并自动计算宽高
     Gui, AboutGui: Show, AutoSize Center, 关于 Floatyball
