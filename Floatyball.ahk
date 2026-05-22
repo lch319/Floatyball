@@ -1,0 +1,3427 @@
+﻿; 编译exe文件信息及版本号设置
+当前工具版本:="1.0.2"                  ;设置版本号
+;@Ahk2Exe-Obey U_bits, = "%A_PtrSize%>4" ? "-64bit" : "-32bit"  ;判断位数
+;@Ahk2Exe-Let U_version = %A_PriorLine~U)^(.+"){1}(.+)".*$~$2%  ;读取版本号以编译
+;@Ahk2Exe-SetMainIcon D:\RunAny\RunPlugins\XiaoYao_悬浮球\历史\图标合集\0_256.ico          ; 指定托盘图标文件
+;@Ahk2Exe-AddResource D:\RunAny\RunPlugins\XiaoYao_悬浮球\历史\图标合集\0_256.ico, 160      ; 替换自带的'蓝色H'图标
+;@Ahk2Exe-AddResource D:\RunAny\RunPlugins\XiaoYao_悬浮球\历史\图标合集\0_256.ico, 206      ; 替换为 '绿色 S'
+;@Ahk2Exe-AddResource D:\RunAny\RunPlugins\XiaoYao_悬浮球\历史\图标合集\0_256.ico, 207      ; 替换自带的'红色H'图标
+;@Ahk2Exe-AddResource D:\RunAny\RunPlugins\XiaoYao_悬浮球\历史\图标合集\0_256.ico, 208      ; 替换为 '红色 S'
+;@Ahk2Exe-ExeName %A_ScriptDir%\Floatyball%U_version%.exe  ; 打包后的exe文件路径
+;@Ahk2Exe-SetCompanyName xiaoyao        ; 企业信息
+;@Ahk2Exe-SetCopyright xiaoyao          ; 版权信息
+;@Ahk2Exe-SetDescription 悬浮工具  ; 文件说明
+;@Ahk2Exe-SetFileVersion %U_version%        ; 文件版本
+;@Ahk2Exe-SetInternalName Floatyball        ; 文件内部名
+;@Ahk2Exe-SetLanguage 0x0804            ; 区域语言
+;@Ahk2Exe-SetName Floatyball          ; 名称
+;@Ahk2Exe-SetProductName Floatyball        ; 产品名称
+;@Ahk2Exe-SetOrigFilename Floatyball.exe      ; 原始文件名称
+;@Ahk2Exe-SetProductVersion %U_version%        ; 产品版本号
+;@Ahk2Exe-SetVersion %U_version%          ; 版本号
+
+; --- 参数设置 ---
+LastHoverTime:= 0       ; 记录最后一次悬停的时间戳
+CurrentAlpha := 255     ; 记录当前实时透明度的变量
+
+; --- 参数设置 ---
+LastHoverTime:= 0       ; 记录最后一次悬停的时间戳
+CurrentAlpha := 255     ; 记录当前实时透明度的变量
+
+; =================== 【新增：权限与自启检测】 ===================
+AdminLaunch := Var_Read("AdminLaunch","0","基础配置",A_ScriptDir "\Settings.ini","否") ; 是否管理员运行
+AutoRun := Var_Read("AutoRun","0","基础配置",A_ScriptDir "\Settings.ini","否") ; 是否开机自启
+
+; --- 管理员启动 ---
+if (!A_IsAdmin && AdminLaunch="1")
+{
+    try
+    {
+        if A_IsCompiled
+            Run *RunAs "%A_ScriptFullPath%" /restart
+        else
+            Run *RunAs "%A_AhkPath%" /restart "%A_ScriptFullPath%"
+    }catch{
+        MsgBox, 1,, 以【管理员权限】启动失败！将以普通权限启动，管理员应用窗口将失效！
+        IfMsgBox OK
+        {
+            if A_IsCompiled
+                Run "%A_ScriptFullPath%" /restart
+            else
+                Run "%A_AhkPath%" /restart "%A_ScriptFullPath%"
+        }
+    }
+    ExitApp
+}
+
+; --- 开机自启检测 ---
+Label_AutoRun(AutoRun)
+; ================================================================
+
+BallImage := Var_Read("BallImage","PokéBall.png","基础配置",A_ScriptDir "\Settings.ini","否") ; 图片文件名
+
+BallImage := Var_Read("BallImage","PokéBall.png","基础配置",A_ScriptDir "\Settings.ini","否") ; 图片文件名
+SnapRange := Var_Read("SnapRange","5","基础配置",A_ScriptDir "\Settings.ini","否")    ; 吸附感应距离
+HideMargin := Var_Read("HideMargin","10","基础配置",A_ScriptDir "\Settings.ini","否") ; 隐藏后露出的宽度（像素）
+HideDelay := Var_Read("HideDelay","800","基础配置",A_ScriptDir "\Settings.ini","否")  ; 吸附后多久开始隐藏 (毫秒)
+maxBallSize := Var_Read("maxBallSize","300","基础配置",A_ScriptDir "\Settings.ini","否") ; 限制最大悬浮球大小
+minBallSize := Var_Read("minBallSize","20","基础配置",A_ScriptDir "\Settings.ini","否")  ; 限制最小悬浮球大小
+BallSizeIncrement := Var_Read("BallSizeIncrement","5","基础配置",A_ScriptDir "\Settings.ini","否") ; 每次滚轮滚动的增量
+ShowTrayIcon := Var_Read("ShowTrayIcon","1","基础配置",A_ScriptDir "\Settings.ini","否") ; 是否显示托盘图标
+EnableWheelResize := Var_Read("EnableWheelResize","1","基础配置",A_ScriptDir "\Settings.ini","否") ; 是否允许滚轮调节大小
+
+GUI_X := Var_Read("GUI_X","","基础配置",A_ScriptDir "\Settings.ini","否") ;x坐标
+GUI_Y := Var_Read("GUI_Y","","基础配置",A_ScriptDir "\Settings.ini","否") ;y坐标
+; ==============================================================================
+; --- 时间模式核心设置 (字体共用 BallSize 版) ---
+; ==============================================================================
+
+; 显示模式：Image=传统图片悬浮球，Time=纯文本时间悬浮条
+DisplayMode := Var_Read("DisplayMode","Image","基础配置",A_ScriptDir "\Settings.ini","否")
+
+; 时间格式：支持 AHK 的 FormatTime 语法。
+; 例如 "HH:mm:ss" 显示 14:30:00，"yyyy-MM-dd" 显示日期。
+; 支持输入 "\n" 实现强制换行双行显示，例如 "yyyy-MM-dd\nHH:mm:ss"
+TimeFormat := Var_Read("TimeFormat","HH:mm:ss","基础配置",A_ScriptDir "\Settings.ini","否")
+TimeFormat := StrReplace(TimeFormat, "\n", "`n")
+
+; --- 文字样式设置 ---
+; 字体名称：你电脑里安装的字体名，比如 "微软雅黑", "黑体", "Consolas"
+TimeFont := Var_Read("TimeFont","LESLIE","基础配置",A_ScriptDir "\Settings.ini","否")
+
+; 字体颜色：ARGB 格式（8位16进制）。前2位是透明度(FF=完全不透明，00=完全透明)，后6位是RGB颜色(如 FFFFFF 是纯白)
+TimeColor := Var_Read("TimeColor","FFFFFFFF","基础配置",A_ScriptDir "\Settings.ini","否")
+
+; 字体大小比例：字号占悬浮球基础大小 (BallSize) 的比例。
+; 比如 BallSize 是 50，比例 0.5，那字号就是 25。推荐在 0.4 ~ 0.6 之间。滚轮调整大小时会自动等比缩放。
+TimeFontRatio := Var_Read("TimeFontRatio","0.4","基础配置",A_ScriptDir "\Settings.ini","否")
+
+; 【修改】字体加粗：1=加粗，0=正常。(注：底层 GDI+ 绘图标准仅支持这两种粗细切换)
+TimeFontBold := Var_Read("TimeFontBold","1","基础配置",A_ScriptDir "\Settings.ini","否")
+
+; 文字垂直微调：填入具体数字(像素)。正数表示文字整体往下挪，负数表示往上挪。
+; 用途：有些字体天生偏上或偏下，导致视觉上没有绝对垂直居中，用这个微调完美对齐。
+TimeOffsetY := Var_Read("TimeOffsetY","0","基础配置",A_ScriptDir "\Settings.ini","否")
+
+; --- 背景包裹边界设置 ---
+; 背景开关：1=显示时间后面的圆角背景框，0=只显示漂浮的纯文字，完全透明无背景框
+EnableTimeBg := Var_Read("EnableTimeBg","1","基础配置",A_ScriptDir "\Settings.ini","否")
+
+; 背景颜色：ARGB 格式。比如 "66000000" 中，66 代表半透明，000000 代表纯黑色。
+TimeBgColor := Var_Read("TimeBgColor","66000000","基础配置",A_ScriptDir "\Settings.ini","否")
+
+; 背景圆角程度：控制背景框的圆润度。0=四四方方的直角矩形，0.2=稍微有点圆角，0.5=左右两边完全是半圆的胶囊/药丸形状
+TimeCornerRatio := Var_Read("TimeCornerRatio","0.2","基础配置",A_ScriptDir "\Settings.ini","否")
+
+; 左右留白：背景框的左边缘和右边缘，距离里面文字的像素距离。数值越大，背景条越长。
+TimePaddingX := Var_Read("TimePaddingX","5","基础配置",A_ScriptDir "\Settings.ini","否")
+
+; 上下留白：背景框的上边缘和下边缘，距离里面文字的像素距离。数值越大，背景条越胖。
+TimePaddingY := Var_Read("TimePaddingY","5","基础配置",A_ScriptDir "\Settings.ini","否")
+
+; ==============================================================================
+
+; --- 动态透明度设置 ---
+EnableDynamicOpacity := Var_Read("EnableDynamicOpacity","1","基础配置",A_ScriptDir "\Settings.ini","否") ; 是否动态调整透明度
+MinOpacity := Var_Read("MinOpacity","120","基础配置",A_ScriptDir "\Settings.ini","否")    ; 鼠标离开后的基础透明度
+MaxOpacity := Var_Read("MaxOpacity","255","基础配置",A_ScriptDir "\Settings.ini","否") ; 鼠标进入后的最高透明度
+FadeStep := Var_Read("FadeStep","15","基础配置",A_ScriptDir "\Settings.ini","否") ; 每次透明度变化的幅度（数值越大变色越快）
+hideOpacity  := Var_Read("hideOpacity","150","基础配置",A_ScriptDir "\Settings.ini","否") ; 隐藏后的透明度
+MouseLeaveDelay := Var_Read("MouseLeaveDelay","1000","基础配置",A_ScriptDir "\Settings.ini","否") ; 鼠标离开后多久开始变透明（毫秒）
+
+IsAlwaysOnTop   := Var_Read("IsAlwaysOnTop","1","基础配置",A_ScriptDir "\Settings.ini","否") ; 1=强制置顶 0=否
+IsLocked := Var_Read("IsLocked","0","基础配置",A_ScriptDir "\Settings.ini","否")        ; 1=固定位置禁止拖拽 0=否
+SavePosition    := Var_Read("SavePosition","1","基础配置",A_ScriptDir "\Settings.ini","否")    ; 1=退出时保存位置 0=保持初始位置不变
+SaveSize        := Var_Read("SaveSize","1","基础配置",A_ScriptDir "\Settings.ini","否") ; 1=退出时保存大小 0=保持初始大小不变
+HideInFullScreen:= Var_Read("HideInFullScreen","1","基础配置",A_ScriptDir "\Settings.ini","否") ; 1=全屏时隐藏 0=否
+EnableEdgeHide  := Var_Read("EnableEdgeHide","1","基础配置",A_ScriptDir "\Settings.ini","否") ; 1=开启贴边隐藏 0=否
+ShowCloseButton := Var_Read("ShowCloseButton","1","基础配置",A_ScriptDir "\Settings.ini","否") ; 1=显示关闭按钮 0=否
+IsFullScreenHidden := false
+
+BallSize := Var_Read("BallSize","50","基础配置",A_ScriptDir "\Settings.ini","否") ;悬浮球大小
+ToggleHotkey := Var_Read("ToggleHotkey","#p","基础配置",A_ScriptDir "\Settings.ini","否") ; 全局显示/隐藏快捷键，默认 Alt+H (!h)
+EnableHotkey := Var_Read("EnableHotkey","1","基础配置",A_ScriptDir "\Settings.ini","否") ; 是否启用全局快捷键
+IsEditMode := 0 ; 编辑模式状态（运行时变量，退出重置为0）
+
+; --- 关闭按钮设置 ---
+
+CloseBtn_X := Var_Read("CloseBtn_X","18","基础配置",A_ScriptDir "\Settings.ini","否") ;关闭按钮的x坐标偏移（相对于悬浮球右边缘的距离）
+CloseBtn_Y := Var_Read("CloseBtn_Y","14","基础配置",A_ScriptDir "\Settings.ini","否") ;关闭按钮的y坐标偏移（相对于悬浮球上边缘的距离）
+CloseBtn_Size := Var_Read("CloseBtn_Size","20","基础配置",A_ScriptDir "\Settings.ini","否") ;关闭按钮的大小（保持正方形）
+CloseBtn_HideTime := Var_Read("CloseBtn_HideTime","400","基础配置",A_ScriptDir "\Settings.ini","否") ;鼠标离开后，按钮继续显示的时间（毫秒），建议 500-1000
+CloseBtn_Thickness := Var_Read("CloseBtn_Thickness","3","基础配置",A_ScriptDir "\Settings.ini","否") ;关闭按钮的粗细
+CloseBtn_VisualMargin := Var_Read("CloseBtn_VisualMargin","5","基础配置",A_ScriptDir "\Settings.ini","否") ;关闭按钮的视觉边距
+CloseBtnAction := Var_Read("CloseBtnAction","0","基础配置",A_ScriptDir "\Settings.ini","否")  ; 关闭按钮的功能类型，默认0=退出程序 1=隐藏悬浮球
+
+; --- 占位符相关：落地文件与获取选中内容配置 ---
+MaxTempFiles := Var_Read("MaxTempFiles","10","基础配置",A_ScriptDir "\Settings.ini","否") ; 每种落地临时文件最多保留的个数
+SelectedCopyKey := Var_Read("SelectedCopyKey","^c","基础配置",A_ScriptDir "\Settings.ini","否") ; 获取选中内容的复制快捷键
+SelectedWaitTime := Var_Read("SelectedWaitTime","0.15","基础配置",A_ScriptDir "\Settings.ini","否") ; 获取选中内容的最长等待时间(秒)
+
+; ==============================================================================
+; --- 新增：配置管理设置 ---
+; ==============================================================================
+CfgMgr_UserConfigDir := Var_Read("UserConfigDir", A_ScriptDir "\UserConfig", "基础配置", A_ScriptDir "\Settings.ini", "否")
+CfgMgr_EnableAutoBackup := Var_Read("EnableAutoBackup", "1", "基础配置", A_ScriptDir "\Settings.ini", "否")
+CfgMgr_MaxBackupCount := Var_Read("MaxBackupCount", "10", "基础配置", A_ScriptDir "\Settings.ini", "否")
+
+; 确保配置和备份目录存在
+if !InStr(FileExist(CfgMgr_UserConfigDir), "D")
+    FileCreateDir, %CfgMgr_UserConfigDir%
+if !InStr(FileExist(CfgMgr_UserConfigDir "\backup"), "D")
+    FileCreateDir, % CfgMgr_UserConfigDir "\backup"
+
+; --- 悬浮球点击事件配置 ---
+; 左键单击
+LBtn_Enable := Var_Read("启用","1","左键单击事件",A_ScriptDir "\Settings.ini","否")
+LBtn_Type   := Var_Read("功能类型","4","左键单击事件",A_ScriptDir "\Settings.ini","否")
+LBtn_Param  := Var_Read("功能参数","Menu_Show1","左键单击事件",A_ScriptDir "\Settings.ini","否","否")
+LBtn_Enable_ctrl := Var_Read("启用_ctrl","1","左键单击事件",A_ScriptDir "\Settings.ini","否")
+LBtn_Type_ctrl   := Var_Read("功能类型_ctrl","1","左键单击事件",A_ScriptDir "\Settings.ini","否")
+LBtn_Param_ctrl  := Var_Read("功能参数_ctrl","","左键单击事件",A_ScriptDir "\Settings.ini","否","否")
+LBtn_Enable_alt  := Var_Read("启用_alt","1","左键单击事件",A_ScriptDir "\Settings.ini","否")
+LBtn_Type_alt    := Var_Read("功能类型_alt","1","左键单击事件",A_ScriptDir "\Settings.ini","否")
+LBtn_Param_alt   := Var_Read("功能参数_alt","","左键单击事件",A_ScriptDir "\Settings.ini","否","否")
+LBtn_Enable_shift := Var_Read("启用_shift","1","左键单击事件",A_ScriptDir "\Settings.ini","否")
+LBtn_Type_shift   := Var_Read("功能类型_shift","1","左键单击事件",A_ScriptDir "\Settings.ini","否")
+LBtn_Param_shift  := Var_Read("功能参数_shift","","左键单击事件",A_ScriptDir "\Settings.ini","否","否")
+
+; 中键单击
+MBtn_Enable := Var_Read("启用","1","中键单击事件",A_ScriptDir "\Settings.ini","否")
+MBtn_Type   := Var_Read("功能类型","6","中键单击事件",A_ScriptDir "\Settings.ini","否")
+MBtn_Param  := Var_Read("功能参数","MsgBox, {$AHK_Var|A_YYYY$}年{$AHK_Var|A_MM$}月{$AHK_Var|A_DD$}日","中键单击事件",A_ScriptDir "\Settings.ini","否","否")
+MBtn_Enable_ctrl := Var_Read("启用_ctrl","1","中键单击事件",A_ScriptDir "\Settings.ini","否")
+MBtn_Type_ctrl   := Var_Read("功能类型_ctrl","1","中键单击事件",A_ScriptDir "\Settings.ini","否")
+MBtn_Param_ctrl  := Var_Read("功能参数_ctrl","","中键单击事件",A_ScriptDir "\Settings.ini","否","否")
+MBtn_Enable_alt  := Var_Read("启用_alt","1","中键单击事件",A_ScriptDir "\Settings.ini","否")
+MBtn_Type_alt    := Var_Read("功能类型_alt","1","中键单击事件",A_ScriptDir "\Settings.ini","否")
+MBtn_Param_alt   := Var_Read("功能参数_alt","","中键单击事件",A_ScriptDir "\Settings.ini","否","否")
+MBtn_Enable_shift := Var_Read("启用_shift","1","中键单击事件",A_ScriptDir "\Settings.ini","否")
+MBtn_Type_shift   := Var_Read("功能类型_shift","1","中键单击事件",A_ScriptDir "\Settings.ini","否")
+MBtn_Param_shift  := Var_Read("功能参数_shift","","中键单击事件",A_ScriptDir "\Settings.ini","否","否")
+
+; 滚轮向上
+WheelUp_Enable := Var_Read("启用","1","滚轮向上事件",A_ScriptDir "\Settings.ini","否")
+WheelUp_Type   := Var_Read("功能类型","2","滚轮向上事件",A_ScriptDir "\Settings.ini","否")
+WheelUp_Param  := Var_Read("功能参数","{Volume_Up}","滚轮向上事件",A_ScriptDir "\Settings.ini","否","否")
+WheelUp_Enable_ctrl := Var_Read("启用_ctrl","1","滚轮向上事件",A_ScriptDir "\Settings.ini","否")
+WheelUp_Type_ctrl   := Var_Read("功能类型_ctrl","1","滚轮向上事件",A_ScriptDir "\Settings.ini","否")
+WheelUp_Param_ctrl  := Var_Read("功能参数_ctrl","","滚轮向上事件",A_ScriptDir "\Settings.ini","否","否")
+WheelUp_Enable_alt  := Var_Read("启用_alt","1","滚轮向上事件",A_ScriptDir "\Settings.ini","否")
+WheelUp_Type_alt    := Var_Read("功能类型_alt","1","滚轮向上事件",A_ScriptDir "\Settings.ini","否")
+WheelUp_Param_alt   := Var_Read("功能参数_alt","","滚轮向上事件",A_ScriptDir "\Settings.ini","否","否")
+WheelUp_Enable_shift := Var_Read("启用_shift","1","滚轮向上事件",A_ScriptDir "\Settings.ini","否")
+WheelUp_Type_shift   := Var_Read("功能类型_shift","1","滚轮向上事件",A_ScriptDir "\Settings.ini","否")
+WheelUp_Param_shift  := Var_Read("功能参数_shift","","滚轮向上事件",A_ScriptDir "\Settings.ini","否","否")
+
+; 滚轮向下
+WheelDown_Enable := Var_Read("启用","1","滚轮向下事件",A_ScriptDir "\Settings.ini","否")
+WheelDown_Type   := Var_Read("功能类型","2","滚轮向下事件",A_ScriptDir "\Settings.ini","否")
+WheelDown_Param  := Var_Read("功能参数","{Volume_Down}","滚轮向下事件",A_ScriptDir "\Settings.ini","否","否")
+WheelDown_Enable_ctrl := Var_Read("启用_ctrl","1","滚轮向下事件",A_ScriptDir "\Settings.ini","否")
+WheelDown_Type_ctrl   := Var_Read("功能类型_ctrl","1","滚轮向下事件",A_ScriptDir "\Settings.ini","否")
+WheelDown_Param_ctrl  := Var_Read("功能参数_ctrl","","滚轮向下事件",A_ScriptDir "\Settings.ini","否","否")
+WheelDown_Enable_alt  := Var_Read("启用_alt","1","滚轮向下事件",A_ScriptDir "\Settings.ini","否")
+WheelDown_Type_alt    := Var_Read("功能类型_alt","1","滚轮向下事件",A_ScriptDir "\Settings.ini","否")
+WheelDown_Param_alt   := Var_Read("功能参数_alt","","滚轮向下事件",A_ScriptDir "\Settings.ini","否","否")
+WheelDown_Enable_shift := Var_Read("启用_shift","1","滚轮向下事件",A_ScriptDir "\Settings.ini","否")
+WheelDown_Type_shift   := Var_Read("功能类型_shift","1","滚轮向下事件",A_ScriptDir "\Settings.ini","否")
+WheelDown_Param_shift  := Var_Read("功能参数_shift","","滚轮向下事件",A_ScriptDir "\Settings.ini","否","否")
+
+; --- 拖放事件配置 ---
+DropFile_Enable := Var_Read("启用","1","拖放事件_文件",A_ScriptDir "\Settings.ini","否")
+DropFile_Type   := Var_Read("功能类型","6","拖放事件_文件",A_ScriptDir "\Settings.ini","否")
+DropFile_Param  := Var_Read("功能参数","MsgBox, {$Dropped_allfile$|-i}","拖放事件_文件",A_ScriptDir "\Settings.ini","否","否")
+DropFile_Enable_ctrl := Var_Read("启用_ctrl","1","拖放事件_文件",A_ScriptDir "\Settings.ini","否")
+DropFile_Type_ctrl   := Var_Read("功能类型_ctrl","1","拖放事件_文件",A_ScriptDir "\Settings.ini","否")
+DropFile_Param_ctrl  := Var_Read("功能参数_ctrl","","拖放事件_文件",A_ScriptDir "\Settings.ini","否","否")
+DropFile_Enable_alt  := Var_Read("启用_alt","1","拖放事件_文件",A_ScriptDir "\Settings.ini","否")
+DropFile_Type_alt    := Var_Read("功能类型_alt","1","拖放事件_文件",A_ScriptDir "\Settings.ini","否")
+DropFile_Param_alt   := Var_Read("功能参数_alt","","拖放事件_文件",A_ScriptDir "\Settings.ini","否","否")
+DropFile_Enable_shift := Var_Read("启用_shift","1","拖放事件_文件",A_ScriptDir "\Settings.ini","否")
+DropFile_Type_shift   := Var_Read("功能类型_shift","1","拖放事件_文件",A_ScriptDir "\Settings.ini","否")
+DropFile_Param_shift  := Var_Read("功能参数_shift","","拖放事件_文件",A_ScriptDir "\Settings.ini","否","否")
+
+DropText_Enable := Var_Read("启用","1","拖放事件_文本",A_ScriptDir "\Settings.ini","否")
+DropText_Type   := Var_Read("功能类型","1","拖放事件_文本",A_ScriptDir "\Settings.ini","否")
+DropText_Param  := Var_Read("功能参数","""{$Dropped_texttofile$}""","拖放事件_文本",A_ScriptDir "\Settings.ini","否","否")
+DropText_Enable_ctrl := Var_Read("启用_ctrl","1","拖放事件_文本",A_ScriptDir "\Settings.ini","否")
+DropText_Type_ctrl   := Var_Read("功能类型_ctrl","1","拖放事件_文本",A_ScriptDir "\Settings.ini","否")
+DropText_Param_ctrl  := Var_Read("功能参数_ctrl","","拖放事件_文本",A_ScriptDir "\Settings.ini","否","否")
+DropText_Enable_alt  := Var_Read("启用_alt","1","拖放事件_文本",A_ScriptDir "\Settings.ini","否")
+DropText_Type_alt    := Var_Read("功能类型_alt","1","拖放事件_文本",A_ScriptDir "\Settings.ini","否")
+DropText_Param_alt   := Var_Read("功能参数_alt","","拖放事件_文本",A_ScriptDir "\Settings.ini","否","否")
+DropText_Enable_shift := Var_Read("启用_shift","1","拖放事件_文本",A_ScriptDir "\Settings.ini","否")
+DropText_Type_shift   := Var_Read("功能类型_shift","1","拖放事件_文本",A_ScriptDir "\Settings.ini","否")
+DropText_Param_shift  := Var_Read("功能参数_shift","","拖放事件_文本",A_ScriptDir "\Settings.ini","否","否")
+
+; --- 环境初始化 ---
+#SingleInstance Force   ;~运行替换旧实例
+#Include *i %A_ScriptDir%\..\RunAny_ObjReg.ahk
+#Include %A_ScriptDir%\lib\Gdip_All.ahk
+#Include %A_ScriptDir%\lib\Helper_function.ahk
+SetWinDelay, -1
+SetBatchLines, -1
+CoordMode, Mouse, Screen
+
+If !pToken := Gdip_Startup() {
+    MsgBox, 48, 错误， GDI+ 启动失败！
+    ExitApp
+}
+
+IconDir := A_ScriptDir "\Icons"
+if !FileExist(IconDir)
+    FileCreateDir, %IconDir%
+
+; --- 1. 初始化 OLE 环境 ---
+DllCall("ole32\OleInitialize", "Ptr", 0)
+
+; 创建窗口：增加 +E0x8 (置顶) 和 +E0x80000 (分层)
+Gui, -Caption +E0x80000 +LastFound +AlwaysOnTop +HwndhBall +E0x08000000
+If (GUI_X = "" && GUI_Y = "") {
+    Gui, Show, xCenter yCenter w%BallSize% h%BallSize% Na, FloatingBall悬浮球
+} else {
+    Gui, Show, x%GUI_X% y%GUI_Y% w%BallSize% h%BallSize% Na, FloatingBall悬浮球
+}
+
+; --- 核心：向 Windows 注册本窗口为 OLE 拖拽目标 ---
+pDropTarget := CreateDropTargetStruct()
+DllCall("ole32\RegisterDragDrop", "Ptr", hBall, "Ptr", pDropTarget)
+
+; --- 关闭按钮 GDI+ 初始化 ---
+Gui, CloseBtn: -Caption +E0x80000 +LastFound +AlwaysOnTop +ToolWindow +HwndhCloseBtn
+Gui, CloseBtn: Show, % "x0 y0 w" CloseBtn_Size " h" CloseBtn_Size " Na", CloseButton悬浮球
+CloseBtn_Hover := false ; 记录按钮自身的悬停状态
+
+WinGetPos, StartX, StartY,,, ahk_id %hBall%
+; 确保变量有初始值，防止第一次计算位移时出现空值
+
+; --- 动画相关的变量初始化 ---
+global IsGif := false
+global GifFrameCount := 1
+global GifCurrentFrame := 0
+global GifDelays := []
+global GifDimensionID
+VarSetCapacity(GifDimensionID, 16, 0)
+
+; 变量初始化
+IsDocked := false
+IsHidden := false
+CurrentEdge := ""
+LastMoveTime := A_TickCount
+BallLastHoverTime := 0
+
+; --- 新增：检查悬浮球图片是否存在，若不存在则寻找下一个 png/gif ---
+TargetPath := IconDir "\" BallImage
+if !FileExist(TargetPath) {
+    FallbackFound := false
+    Loop, Files, %IconDir%\*.*
+    {
+        if (A_LoopFileExt = "png" || A_LoopFileExt = "gif") {
+            BallImage := A_LoopFileName
+            TargetPath := IconDir "\" BallImage
+            FallbackFound := true
+            ; 将新找到的可用图片写回配置文件，防止下次启动仍报错
+            Var_Set(BallImage, "PokéBall.png", "BallImage", "基础配置", A_ScriptDir "\Settings.ini")
+            break ; 找到第一个合适的就退出循环
+        }
+    }
+
+    ; 如果连一张 png/gif 都没找到的极端情况防错
+    if (!FallbackFound) {
+        MsgBox, 48, 错误, Icons 文件夹中未找到任何可用的 .png 或 .gif 图片！`n请放入图片后重试。
+        ExitApp
+    }
+}
+
+; 载入图片 (使用新增的支持 GIF 的自定义函数)
+LoadBallImage(TargetPath)
+
+LastMoveTime := A_TickCount
+BallLastHoverTime := 0  ; 记录鼠标离开悬浮球的基准时间戳
+
+; 首次显示：直接调用更新函数，这会自动设置窗口的初始位置
+UpdateBallDisplay(hBall, pBitmap, StartX, StartY, BallSize, MaxOpacity)
+; 首次运行执行一次吸附检查
+GoSub, HandleSnapping
+
+SetTimer, WatchMouse, 30
+
+; --- 新增：时钟刷新定时器 ---
+SetTimer, UpdateTimeLoop, 1000
+
+; --- 新增：如果初始状态是时间模式，清空图片留边数据并暂停 GIF ---
+if (DisplayMode = "Time") {
+    ImgPadL_Ratio := 0, ImgPadR_Ratio := 0, ImgPadT_Ratio := 0, ImgPadB_Ratio := 0
+    SetTimer, UpdateGifFrame, Off
+}
+
+; 初始化托盘图标显示状态
+if (ShowTrayIcon = "0")
+    Menu, Tray, NoIcon
+else
+    Menu, Tray, Icon
+
+; 拦截托盘图标鼠标消息 (实现左键显示，右键打开悬浮球菜单)
+OnMessage(0x404, "AHK_NOTIFYICON")
+
+; --- 注册全局显示/隐藏快捷键 ---
+if (ToggleHotkey != "") {
+    Hotkey, %ToggleHotkey%, ToggleBallVisibility, UseErrorLevel
+    if (EnableHotkey != "1")
+        Hotkey, %ToggleHotkey%, Off ; 如果配置不启用，则关闭热键
+}
+
+OnExit, 退出时运行
+return
+
+;═════════════════════════════════设置鼠标左键移动窗口═════════════════════════════════════════════════
+#If MouseIsHwnd(hBall)
+    *~LButton::
+        SetWinDelay, -1
+
+        ; 2. 记录【按下瞬间】的初始状态（绝对基准点，同时获取真实宽高）
+        MouseGetPos, StartMouseX, StartMouseY
+        WinGetPos, StartWinX, StartWinY, StartWinW, StartWinH, ahk_id %hBall%
+
+        ; 判定是否移动过的标记
+        HasMoved := false
+
+        ; 只要左键还处于按下状态（逻辑或物理），就持续循环
+        While GetKeyState("LButton", "P")
+        {
+            MouseGetPos, CurrentMouseX, CurrentMouseY
+
+            ; 计算鼠标相对于初始位置的偏移量
+            DeltaX := CurrentMouseX - StartMouseX
+            DeltaY := CurrentMouseY - StartMouseY
+
+            ; 如果偏移超过2像素，才认为开始拖拽（防手抖，防误触点击）
+            if (!HasMoved && (Abs(DeltaX) > 2 || Abs(DeltaY) > 2))
+                HasMoved := true
+
+            if (HasMoved && IsLocked != "1")
+            {
+                TargetX := StartWinX + DeltaX
+                TargetY := StartWinY + DeltaY
+
+                SysGet, Mon, MonitorWorkArea
+                curPadL := Round(ImgPadL_Ratio * BallSize)
+                curPadR := Round(ImgPadR_Ratio * BallSize)
+                curPadT := Round(ImgPadT_Ratio * BallSize)
+                curPadB := Round(ImgPadB_Ratio * BallSize)
+
+                ; 【修改点】：使用 StartWinW/StartWinH 代替原本硬编码的 BallSize 防越界
+                if (TargetX + curPadL < MonLeft)
+                    TargetX := MonLeft - curPadL
+                if (TargetX + StartWinW - curPadR > MonRight)
+                    TargetX := MonRight - StartWinW + curPadR
+
+                if (TargetY + curPadT < MonTop)
+                    TargetY := MonTop - curPadT
+                if (TargetY + StartWinH - curPadB > MonBottom)
+                    TargetY := MonBottom - StartWinH + curPadB
+
+                ; 5. 更新显示
+                UpdateBallDisplay(hBall, pBitmap, TargetX, TargetY, BallSize, MaxOpacity)
+
+                ; 同步更新关闭按钮（如果开启）
+                if (ShowCloseButton = "1") {
+                    ; 【修复】使用真实宽度 StartWinW 计算，并用 WinMove 平滑移动防闪烁
+                    cbX := TargetX + StartWinW - CloseBtn_X
+                    cbY := TargetY - CloseBtn_Y
+                    WinMove, ahk_id %hCloseBtn%,, %cbX%, %cbY%
+
+                    ; 确保拖拽时按钮不会意外消失
+                    if !DllCall("IsWindowVisible", "Ptr", hCloseBtn)
+                        Gui, CloseBtn: Show, Na
+                }
+            }
+            Sleep, 10 ; 降低 CPU 占用，保持流畅
+        }
+
+        ; 6. 鼠标松开后的最终处理
+        MouseGetPos,,, EndWin ; 【新增】获取松开鼠标那一刻，鼠标指针下的窗口句柄
+        if (IsLocked != "1") {
+            ;没固定位置时，需要区分是“拖拽”还是“点击”
+            if (HasMoved) {
+                ; 发生过拖拽，松开时触发吸附逻辑
+                GoSub, HandleSnapping
+            } else if (EndWin = hBall) {
+                ; 没有拖拽位移，且在球上松开，触发左键点击
+                GoSub, LeftClickAction
+            }
+        } else {
+            ; 没有位移，触发点击事件
+            if (HasMoved)
+                GoSub, HandleSnapping
+            else if (EndWin = hBall) ; 【优化】确保没移动且松开时在球上才触发
+                GoSub, LeftClickAction
+        }
+
+    return
+
+    *~WheelUp:: ; 滚轮向上
+        if (EnableWheelResize = "1") {
+            BallSize += BallSizeIncrement
+            if (BallSize > maxBallSize)
+                BallSize := maxBallSize
+            GoSub, ApplyNewSize
+        } else {
+            finalEnable := WheelUp_Enable, finalType := WheelUp_Type, finalParam := WheelUp_Param
+            if (GetKeyState("Ctrl", "P") && WheelUp_Enable_ctrl == "1")
+                finalEnable := WheelUp_Enable_ctrl, finalType := WheelUp_Type_ctrl, finalParam := WheelUp_Param_ctrl
+            else if (GetKeyState("Alt", "P") && WheelUp_Enable_alt == "1")
+                finalEnable := WheelUp_Enable_alt, finalType := WheelUp_Type_alt, finalParam := WheelUp_Param_alt
+            else if (GetKeyState("Shift", "P") && WheelUp_Enable_shift == "1")
+                finalEnable := WheelUp_Enable_shift, finalType := WheelUp_Type_shift, finalParam := WheelUp_Param_shift
+
+            ExecuteAction(finalEnable, finalType, finalParam)
+        }
+    return
+
+    *~WheelDown:: ; 滚轮向下
+        if (EnableWheelResize = "1") {
+            BallSize -= BallSizeIncrement
+            if (BallSize < minBallSize)
+                BallSize := minBallSize
+            GoSub, ApplyNewSize
+        } else {
+            finalEnable := WheelDown_Enable, finalType := WheelDown_Type, finalParam := WheelDown_Param
+            if (GetKeyState("Ctrl", "P") && WheelDown_Enable_ctrl == "1")
+                finalEnable := WheelDown_Enable_ctrl, finalType := WheelDown_Type_ctrl, finalParam := WheelDown_Param_ctrl
+            else if (GetKeyState("Alt", "P") && WheelDown_Enable_alt == "1")
+                finalEnable := WheelDown_Enable_alt, finalType := WheelDown_Type_alt, finalParam := WheelDown_Param_alt
+            else if (GetKeyState("Shift", "P") && WheelDown_Enable_shift == "1")
+                finalEnable := WheelDown_Enable_shift, finalType := WheelDown_Type_shift, finalParam := WheelDown_Param_shift
+
+            ExecuteAction(finalEnable, finalType, finalParam)
+        }
+    return
+
+    ApplyNewSize:
+        WinGetPos, curX, curY,,, ahk_id %hBall%
+        ; 立即重新绘制图片
+        UpdateBallDisplay(hBall, pBitmap, curX, curY, BallSize, CurrentAlpha)
+        ; 调整大小后建议重新检查一次吸附状态，防止变大后超出屏幕
+        GoSub, HandleSnapping
+    return
+
+    *~RButton up:: GoSub, RightClickAction
+    *~MButton up:: GoSub, MiddleClickAction
+#If
+
+#If MouseIsHwnd(hCloseBtn)
+    *~LButton::
+        if (CloseBtnAction = "1") {
+            ; 隐藏到托盘（如果未启用托盘图标，会临时显示图标）
+            GoSub, HideToTray
+        } else {
+            ; 正常退出（会执行保存位置等清理工作）
+            GoSub, 退出时运行
+        }
+    return
+#If
+return
+
+;═════════════════════════════════ 编辑模式热键 ═════════════════════════════════════════════════
+#If IsEditMode
+    Up:: MoveBallBy(0, -5)
+    Down:: MoveBallBy(0, 5)
+    Left:: MoveBallBy(-5, 0)
+    Right:: MoveBallBy(5, 0)
+
+    NumpadAdd::
+    =::
+    +::
+        BallSize += BallSizeIncrement
+        if (BallSize > maxBallSize)
+            BallSize := maxBallSize
+        GoSub, ApplyNewSize
+    return
+
+    NumpadSub::
+    -::
+        BallSize -= BallSizeIncrement
+        if (BallSize < minBallSize)
+            BallSize := minBallSize
+        GoSub, ApplyNewSize
+    return
+#If
+
+; 辅助移动函数
+MoveBallBy(dx, dy) {
+    global hBall, pBitmap, BallSize, CurrentAlpha, ImgPadL_Ratio, ImgPadR_Ratio, ImgPadT_Ratio, ImgPadB_Ratio
+    ; 【修改点】：获取真实的 curW 和 curH
+    WinGetPos, curX, curY, curW, curH, ahk_id %hBall%
+    TargetX := curX + dx
+    TargetY := curY + dy
+
+    SysGet, Mon, MonitorWorkArea
+    curPadL := Round(ImgPadL_Ratio * BallSize)
+    curPadR := Round(ImgPadR_Ratio * BallSize)
+    curPadT := Round(ImgPadT_Ratio * BallSize)
+    curPadB := Round(ImgPadB_Ratio * BallSize)
+
+    if (TargetX + curPadL < MonLeft)
+        TargetX := MonLeft - curPadL
+    ; 【修改点】：用实时宽度 curW 计算右边缘
+    if (TargetX + curW - curPadR > MonRight)
+        TargetX := MonRight - curW + curPadR
+    if (TargetY + curPadT < MonTop)
+        TargetY := MonTop - curPadT
+    if (TargetY + curH - curPadB > MonBottom)
+        TargetY := MonBottom - curH + curPadB
+
+    UpdateBallDisplay(hBall, pBitmap, TargetX, TargetY, BallSize, CurrentAlpha)
+}
+
+HandleSnapping:
+    WinGetPos, CurX, CurY, CurW, CurH, ahk_id %hBall%
+    SysGet, Mon, MonitorWorkArea
+
+    curPadL := Round(ImgPadL_Ratio * BallSize)
+    curPadR := Round(ImgPadR_Ratio * BallSize)
+    curPadT := Round(ImgPadT_Ratio * BallSize)
+    curPadB := Round(ImgPadB_Ratio * BallSize)
+
+    ; 初始目标位置即为当前位置
+    TargetX := CurX
+    TargetY := CurY
+    IsDocked := false
+    CurrentEdge := ""
+
+    ; 计算图案主体当前在屏幕上的真实坐标
+    ContentLeft  := CurX + curPadL
+    ContentRight := CurX + CurW - curPadR
+    ContentTop   := CurY + curPadT
+
+    ; --- 1. 吸附判定 ---
+    if (ContentLeft < MonLeft + SnapRange) {
+        TargetX := MonLeft - curPadL, IsDocked := true, CurrentEdge := "L"
+    }
+    else if (ContentRight > MonRight - SnapRange) {
+        TargetX := MonRight - CurW + curPadR, IsDocked := true, CurrentEdge := "R"
+    }
+    else if (ContentTop < MonTop + SnapRange) {
+        TargetY := MonTop - curPadT, IsDocked := true, CurrentEdge := "T"
+    }
+
+    ; --- 2. 边界强制修正 (确保图案主体不超出屏幕工作区) ---
+    if (TargetX + curPadL < MonLeft)
+        TargetX := MonLeft - curPadL
+    if (TargetX + CurW - curPadR > MonRight)
+        TargetX := MonRight - CurW + curPadR
+    if (TargetY + curPadT < MonTop)
+        TargetY := MonTop - curPadT
+    if (TargetY + CurH - curPadB > MonBottom)
+        TargetY := MonBottom - CurH + curPadB
+
+    UpdateBallDisplay(hBall, pBitmap, TargetX, TargetY, BallSize, CurrentAlpha)
+
+    if (IsDocked) {
+        LastMoveTime := A_TickCount
+        IsHidden := false
+    }
+return
+
+; --- 鼠标监控 ---
+WatchMouse:
+    ; --- 2. 全屏自动隐藏检测 ---
+    if (HideInFullScreen = "1") {
+        WinGet, actWin, ID, A
+        WinGetClass, actClass, ahk_id %actWin%
+        WinGetPos, ax, ay, aw, ah, ahk_id %actWin%
+        SysGet, mon, Monitor
+        ; 判断是否全屏且不是桌面背景
+        if (actClass != "WorkerW" && actClass != "Progman" && ax <= monLeft && ay <= monTop && aw >= (monRight-monLeft) && ah >= (monBottom-monTop)) {
+            if (!IsFullScreenHidden) {
+                WinHide, ahk_id %hBall%
+                WinHide, ahk_id %hCloseBtn%
+                IsFullScreenHidden := true
+            }
+            return ; 全屏状态下直接跳过后续的透明度和位置计算
+        } else if (IsFullScreenHidden) {
+            WinShow, ahk_id %hBall%
+            IsFullScreenHidden := false
+            ; 【新增】全屏结束重新显示时，恢复动画
+            if (IsGif)
+                GoSub, UpdateGifFrame
+        }
+    }
+
+    if (IsAlwaysOnTop = "1" && !IsFullScreenHidden) {
+        WinSet, AlwaysOnTop, On, ahk_id %hBall%
+    }
+
+    if (GetKeyState("LButton", "P"))
+        return
+
+    MouseGetPos, mx, my, mWin
+    IsOnBall := (mWin = hBall)
+    IsOnClose := (mWin = hCloseBtn)
+    IsHovered := (IsOnBall || IsOnClose)
+
+    ;只要鼠标在球或按钮上，就刷新时间戳
+    if (IsHovered)
+        BallLastHoverTime := A_TickCount
+
+    ; --- 关闭按钮的状态切换 ---
+    if (IsOnClose != CloseBtn_Hover) {
+        CloseBtn_Hover := IsOnClose
+        UpdateCloseBtnDisplay(hCloseBtn,CloseBtn_Size,CloseBtn_Thickness, CloseBtn_VisualMargin, CloseBtn_Hover, CurrentAlpha)
+    }
+
+    ; --- 修改后的透明度逻辑 ---
+    if (IsEditMode || IsHovered || (A_TickCount - BallLastHoverTime < MouseLeaveDelay) || EnableDynamicOpacity = "0") {
+        TargetAlpha := MaxOpacity ; 鼠标悬停、离开时间未到，或者【关闭了动态透明度】时，保持最高透明度
+    } else {
+        TargetAlpha := MinOpacity ; 超过延迟且开启了动态透明度时，进入淡出逻辑
+    }
+
+    if (IsHidden) {
+        TargetAlpha := hideOpacity ; 如果触发了贴边隐藏，强制使用隐藏透明度覆盖上述逻辑
+    }
+
+    if (CurrentAlpha != TargetAlpha) {
+        if (CurrentAlpha < TargetAlpha)
+            CurrentAlpha := ((CurrentAlpha + FadeStep) > TargetAlpha) ? TargetAlpha : (CurrentAlpha + FadeStep)
+        else
+            CurrentAlpha := ((CurrentAlpha - FadeStep) < TargetAlpha) ? TargetAlpha : (CurrentAlpha - FadeStep)
+
+        WinGetPos, curX, curY,,, ahk_id %hBall%
+        UpdateBallDisplay(hBall, pBitmap, curX, curY, BallSize, CurrentAlpha)
+        UpdateCloseBtnDisplay(hCloseBtn,CloseBtn_Size,CloseBtn_Thickness, CloseBtn_VisualMargin, CloseBtn_Hover, CurrentAlpha)
+    }
+
+    ; --- 关闭按钮显示/位置控制 (核心修改处) ---
+    if (ShowCloseButton = "1" && IsHovered && !IsHidden) {   ; <--- 这里加上了 ShowCloseButton = "1"
+        LastHoverTime := A_TickCount ; 只要还在球或按钮上，就不断更新时间戳
+
+        WinGetPos, bx, by, bw, bh, ahk_id %hBall%
+        btnX := bx + bw - CloseBtn_X
+        btnY := by - CloseBtn_Y
+
+        WinMove, ahk_id %hCloseBtn%,, %btnX%, %btnY%
+        if !DllCall("IsWindowVisible", "Ptr", hCloseBtn)
+            Gui, CloseBtn: Show, Na
+    } else {
+        ; 如果不需要显示关闭按钮，或者鼠标离开了
+        if (ShowCloseButton != "1" || A_TickCount - LastHoverTime > CloseBtn_HideTime) { ; <--- 这里加上了立刻隐藏的判断
+            Gui, CloseBtn: Hide
+        }
+    }
+
+    ; --- 原有的隐藏/显示判定 ---
+    if (IsHovered) {
+        if (IsHidden) {
+            GoSub, ShowBall
+        }
+        LastMoveTime := A_TickCount
+    } else {
+        ; <--- 在这里的 if 中加入 EnableEdgeHide = "1"
+        if (EnableEdgeHide = "1" && IsDocked && !IsHidden && (A_TickCount - LastMoveTime > HideDelay)) {
+            GoSub, HideBall
+        }
+    }
+return
+
+; --- 执行隐藏/显示 ---
+HideBall:
+    IsHidden := true
+    SysGet, Mon, MonitorWorkArea
+    WinGetPos, x, y, w, h, ahk_id %hBall%
+    newX := x, newY := y
+
+    ; 计算当前尺寸下的实际像素留边量
+    curPadL := Round(ImgPadL_Ratio * BallSize)
+    curPadR := Round(ImgPadR_Ratio * BallSize)
+    curPadT := Round(ImgPadT_Ratio * BallSize)
+    curPadB := Round(ImgPadB_Ratio * BallSize)
+
+    if (CurrentEdge = "L")
+        newX := MonLeft - w + HideMargin + curPadR
+    else if (CurrentEdge = "R")
+        newX := MonRight - HideMargin - curPadL
+    else if (CurrentEdge = "T")
+        newY := MonTop - h + HideMargin + curPadB
+
+    if (newX = "" || newY = "")
+        return
+
+    ; 直接在更新函数里移动并改变透明度
+    UpdateBallDisplay(hBall, pBitmap, newX, newY, BallSize, CurrentAlpha)
+return
+
+ShowBall:
+    IsHidden := false
+    SysGet, Mon, MonitorWorkArea
+    WinGetPos, x, y, w, h, ahk_id %hBall%
+    newX := x, newY := y
+
+    curPadL := Round(ImgPadL_Ratio * BallSize)
+    curPadR := Round(ImgPadR_Ratio * BallSize)
+    curPadT := Round(ImgPadT_Ratio * BallSize)
+
+    if (CurrentEdge = "L")
+        newX := MonLeft - curPadL
+    else if (CurrentEdge = "R")
+        newX := MonRight - w + curPadR
+    else if (CurrentEdge = "T")
+        newY := MonTop - curPadT
+
+    UpdateBallDisplay(hBall, pBitmap, newX, newY, BallSize, CurrentAlpha)
+    ; 【新增】如果是 GIF，从边缘拉出时恢复动画
+    if (IsGif)
+        GoSub, UpdateGifFrame
+
+return
+
+LeftClickAction:
+    if (IsEditMode) {
+        ToolTip, 🛠️ 编辑模式中：请【右键点击悬浮球】退出并保存！
+        SetTimer, RemoveToolTip, -2000
+        return
+    }
+    finalEnable := LBtn_Enable, finalType := LBtn_Type, finalParam := LBtn_Param
+    if (GetKeyState("Ctrl", "P") && LBtn_Enable_ctrl == "1")
+        finalEnable := LBtn_Enable_ctrl, finalType := LBtn_Type_ctrl, finalParam := LBtn_Param_ctrl
+    else if (GetKeyState("Alt", "P") && LBtn_Enable_alt == "1")
+        finalEnable := LBtn_Enable_alt, finalType := LBtn_Type_alt, finalParam := LBtn_Param_alt
+    else if (GetKeyState("Shift", "P") && LBtn_Enable_shift == "1")
+        finalEnable := LBtn_Enable_shift, finalType := LBtn_Type_shift, finalParam := LBtn_Param_shift
+
+    ExecuteAction(finalEnable, finalType, finalParam)
+return
+
+MiddleClickAction:
+    if (IsEditMode) {
+        ToolTip, 🛠️ 编辑模式中：请【右键点击悬浮球】退出并保存！
+        SetTimer, RemoveToolTip, -2000
+        return
+    }
+    finalEnable := MBtn_Enable, finalType := MBtn_Type, finalParam := MBtn_Param
+    if (GetKeyState("Ctrl", "P") && MBtn_Enable_ctrl == "1")
+        finalEnable := MBtn_Enable_ctrl, finalType := MBtn_Type_ctrl, finalParam := MBtn_Param_ctrl
+    else if (GetKeyState("Alt", "P") && MBtn_Enable_alt == "1")
+        finalEnable := MBtn_Enable_alt, finalType := MBtn_Type_alt, finalParam := MBtn_Param_alt
+    else if (GetKeyState("Shift", "P") && MBtn_Enable_shift == "1")
+        finalEnable := MBtn_Enable_shift, finalType := MBtn_Type_shift, finalParam := MBtn_Param_shift
+
+    ExecuteAction(finalEnable, finalType, finalParam)
+return
+
+RightClickAction:
+    ; ▼▼▼ 右键拦截改为：如果是编辑模式，直接退出 ▼▼▼
+    if (IsEditMode) {
+        GoSub, ExitEditMode
+        return
+    }
+
+    Menu, MyMenu, Add
+    Menu, MenuTimeStyle, Add
+    Menu, MenuStyle, Add
+    Menu, MenuMore, Add
+
+    Menu, MyMenu, DeleteAll
+    Menu, MenuTimeStyle, DeleteAll  ; <--- 新增这一行
+    Menu, MenuStyle, DeleteAll
+    Menu, MenuMore, DeleteAll
+
+    ; --- 动态构建样式子菜单 (根据当前显示模式切换) ---
+    if (DisplayMode = "Time") {
+        ; 1. 添加可点击的开关项
+        Menu, MenuTimeStyle, Add, 文字加粗显示, ToggleTimeFontBold
+        if (TimeFontBold = "1")
+            Menu, MenuTimeStyle, Check, 文字加粗显示
+
+        Menu, MenuTimeStyle, Add, 显示时间背景, ToggleTimeBg
+        if (EnableTimeBg = "1")
+            Menu, MenuTimeStyle, Check, 显示时间背景
+
+        Menu, MenuTimeStyle, Add  ; 分割线
+
+        ; 2. 准备截断过长字符的辅助变量 (限制最多显示 12 个字符)
+        maxL := 12
+
+        ; 还原真实换行符为 \n 以便单行显示，防菜单断层
+        dispFmt := StrReplace(TimeFormat, "`n", "\n")
+
+        ; 三元表达式：长度超限则截断并拼接 "..."
+        m_Fmt   := StrLen(dispFmt) > maxL ? SubStr(dispFmt, 1, maxL) . "..." : dispFmt
+        m_Font  := StrLen(TimeFont) > maxL ? SubStr(TimeFont, 1, maxL) . "..." : TimeFont
+        m_FCol  := StrLen(TimeColor) > maxL ? SubStr(TimeColor, 1, maxL) . "..." : TimeColor
+        m_BCol  := StrLen(TimeBgColor) > maxL ? SubStr(TimeBgColor, 1, maxL) . "..." : TimeBgColor
+        m_Ratio := StrLen(TimeCornerRatio) > maxL ? SubStr(TimeCornerRatio, 1, maxL) . "..." : TimeCornerRatio
+
+        ; 3. 添加带有当前配置信息的展示项，并将其指向一个空动作且禁用
+        Menu, MenuTimeStyle, Add, % "时间格式 (" m_Fmt ")", MenuDoNothing
+        Menu, MenuTimeStyle, Disable, % "时间格式 (" m_Fmt ")"
+
+        Menu, MenuTimeStyle, Add, % "字体名称 (" m_Font ")", MenuDoNothing
+        Menu, MenuTimeStyle, Disable, % "字体名称 (" m_Font ")"
+
+        Menu, MenuTimeStyle, Add, % "字体颜色 (" m_FCol ")", MenuDoNothing
+        Menu, MenuTimeStyle, Disable, % "字体颜色 (" m_FCol ")"
+
+        Menu, MenuTimeStyle, Add, % "背景颜色 (" m_BCol ")", MenuDoNothing
+        Menu, MenuTimeStyle, Disable, % "背景颜色 (" m_BCol ")"
+
+        Menu, MenuTimeStyle, Add, % "背景圆角 (" m_Ratio ")", MenuDoNothing
+        Menu, MenuTimeStyle, Disable, % "背景圆角 (" m_Ratio ")"
+
+        ; 将时间样式子菜单挂载到主菜单
+        Menu, MyMenu, Add, 时间样式, :MenuTimeStyle
+
+    } else {
+        ; 构建原有的“悬浮球样式”图片菜单
+        Loop, Files, %IconDir%\*.*
+        {
+            if (A_LoopFileExt = "png" || A_LoopFileExt = "gif") {
+                Menu, MenuStyle, Add, %A_LoopFileName%, UpdateBallStyle
+                if (A_LoopFileName = BallImage)
+                    Menu, MenuStyle, Check, %A_LoopFileName%
+            }
+        }
+
+        Menu, MyMenu, Add, 悬浮球样式, :MenuStyle
+    }
+
+    Menu, MyMenu, Add, 切换(图标/时间), ToggleDisplayMode  ; <--- 【新增这一行】
+    Menu, MyMenu, Add, 事件设置, ShowEventSettingsGUI
+    Menu, MyMenu, Add, 全局设置, ShowMainSettingsGUI
+
+    Menu, MyMenu, Add  ; 分割线
+    ; --------------------------------------
+
+    ;构建“更多选项”子菜单 ---
+    Menu, MenuMore, Add, 滚轮调节大小, ToggleWheelResize
+    Menu, MenuMore, Add, 显示关闭按钮, ToggleCloseButton
+    Menu, MenuMore, Add, 关闭按钮仅隐藏, ToggleCloseBtnAction
+    Menu, MenuMore, Add, 显示托盘图标, ToggleTrayIcon
+    Menu, MenuMore, Add, 动态透明度, ToggleDynamicOpacity
+    Menu, MenuMore, Add  ; 分割线
+    Menu, MenuMore, Add, 退出时保存大小, ToggleSaveSize
+    Menu, MenuMore, Add, 退出时保存位置, ToggleSavePosition
+    Menu, MenuMore, Add  ; 分割线
+    Menu, MenuMore, Add, 位置重置, ResetPosition
+    Menu, MenuMore, Add, 大小重置, ResetSize
+    Menu, MenuMore, Add, 全部重置, ResetAll
+    Menu, MenuMore, Add, 编辑模式, ToggleEditMode
+    Menu, MenuMore, Add  ; 分割线
+    Menu, MenuMore, Add, 隐藏到托盘, HideToTray
+
+    Menu, MyMenu, Add, % "全局快捷键 (" ToggleHotkey ")", ToggleHotkeyEnable
+    ; 动态创建/刷新菜单
+    Menu, MyMenu, Add, 置顶显示, ToggleAlwaysOnTop
+    Menu, MyMenu, Add, 贴边自动隐藏, ToggleEdgeHide
+    Menu, MyMenu, Add, 全屏时自动隐藏, ToggleFullScreenHide
+
+    Menu, MyMenu, Add, 固定位置, ToggleLockPosition
+    Menu, MyMenu, Add, 更多选项, :MenuMore
+
+    ; ==============================================================================
+    ; --- 新增/修改：动态构建「配置管理」子菜单 ---
+    ; ==============================================================================
+    ; 先清空防止重复叠加
+    Menu, MenuConfigMgr, Add
+    Menu, MenuConfigMgr, DeleteAll
+    Menu, MenuMyConfigs, Add
+    Menu, MenuMyConfigs, DeleteAll
+    Menu, MenuMyBackups, Add
+    Menu, MenuMyBackups, DeleteAll
+
+    ; 1. 构建“我的配置”动态菜单
+    CfgMgr_HasConfig := false
+    Loop, Files, %CfgMgr_UserConfigDir%\*.ini
+    {
+        SplitPath, A_LoopFileName,,,, configNameNoExt
+        Menu, MenuMyConfigs, Add, %configNameNoExt%, LoadUserConfig
+        CfgMgr_HasConfig := true
+    }
+    if (!CfgMgr_HasConfig)
+        Menu, MenuMyConfigs, Add, (无可用配置), MenuDoNothing
+
+    ; 2. 构建“自动备份”动态菜单
+    CfgMgr_HasBackup := false
+    CfgMgr_FileList := ""
+    Loop, Files, %CfgMgr_UserConfigDir%\backup\Settings_*.ini
+        CfgMgr_FileList .= A_LoopFileTimeModified "`t" A_LoopFileName "`n"
+
+    Sort, CfgMgr_FileList, R ; 按时间戳倒序
+
+    Loop, Parse, CfgMgr_FileList, `n, `r
+    {
+        if (A_LoopField = "")
+            continue
+        bakFile := SubStr(A_LoopField, InStr(A_LoopField, "`t") + 1)
+        if RegExMatch(bakFile, "Settings_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})\.ini", m) {
+            dispName := m1 "-" m2 "-" m3 " " m4 ":" m5 ":" m6
+            Menu, MenuMyBackups, Add, %dispName%, LoadBackupConfig
+            CfgMgr_HasBackup := true
+        }
+    }
+    if (!CfgMgr_HasBackup)
+        Menu, MenuMyBackups, Add, (无备份), MenuDoNothing
+
+    ; 3. 构建“配置管理”主菜单
+    Menu, MenuConfigMgr, Add, 保存当前配置..., SaveUserConfig
+    Menu, MenuConfigMgr, Add, 我的配置, :MenuMyConfigs
+    Menu, MenuConfigMgr, Add, 自动备份, :MenuMyBackups
+    Menu, MenuConfigMgr, Add, 打开配置文件夹, OpenConfigDir
+    Menu, MenuConfigMgr, Add ; 分割线
+    Menu, MenuConfigMgr, Add, 清空所有备份, ClearAllBackups
+    Menu, MenuConfigMgr, Add, 开启自动备份, ToggleAutoBackup
+
+    if (CfgMgr_EnableAutoBackup = "1")
+        Menu, MenuConfigMgr, Check, 开启自动备份
+    else
+        Menu, MenuConfigMgr, Uncheck, 开启自动备份
+
+    Menu, MyMenu, Add, 配置管理, :MenuConfigMgr
+
+    Menu, MyMenu, Add  ; 分割线
+
+    ;Menu, MyMenu, Add, 编辑配置文件, EditConfig
+    Menu, MyMenu, Add, 重启, ReloadScript
+    Menu, MyMenu, Add, 停用, ToggleSuspend
+    Menu, MyMenu, Add, 关于, ShowAboutGui
+    Menu, MyMenu, Add  ; 分割线
+
+
+    Menu, MyMenu, Add, 退出, 退出时运行
+
+    Loop, 4 {
+        currVar := ["IsLocked", "IsAlwaysOnTop", "EnableEdgeHide", "HideInFullScreen"][A_Index]
+        currName := ["固定位置", "置顶显示", "贴边自动隐藏", "全屏时自动隐藏"][A_Index]
+
+        if (%currVar% = "1")
+            Menu, MyMenu, Check, %currName%
+        else
+            Menu, MyMenu, Uncheck, %currName%
+    }
+
+    Loop, 7 {
+        currVar := ["ShowCloseButton", "ShowTrayIcon", "EnableWheelResize", "CloseBtnAction", "EnableDynamicOpacity", "SaveSize", "SavePosition"][A_Index]
+        currName := ["显示关闭按钮", "显示托盘图标", "滚轮调节大小", "关闭按钮仅隐藏", "动态透明度", "退出时保存大小", "退出时保存位置"][A_Index]
+
+        if (%currVar% = "1")
+            Menu, MenuMore, Check, %currName%
+        else
+            Menu, MenuMore, Uncheck, %currName%
+    }
+
+    ;根据 AHK 内置变量判断“停用”是否打钩 ---
+    if (A_IsSuspended)
+        Menu, MyMenu, Check, 停用
+    else
+        Menu, MyMenu, Uncheck, 停用
+
+    if (EnableHotkey = "1")
+        Menu, MyMenu, Check, % "全局快捷键 (" ToggleHotkey ")"
+    else
+        Menu, MyMenu, Uncheck, % "全局快捷键 (" ToggleHotkey ")"
+
+    Menu, MyMenu, Show
+
+return
+
+退出时运行:
+    if (SaveSize = "1") {
+        Var_Set(BallSize, "50", "BallSize", "基础配置",A_ScriptDir "\Settings.ini")
+    }
+    if (SavePosition = "1") {
+        Gosub, 获取悬浮球坐标_调整到屏幕内
+        Var_Set(nowX,"","GUI_X", "基础配置",A_ScriptDir "\Settings.ini")
+        Var_Set(nowY,"","GUI_Y", "基础配置",A_ScriptDir "\Settings.ini")
+    }
+
+    If (CfgMgr_EnableAutoBackup = "1")
+        BackupCurrentConfig()
+    ; 优雅退出
+    SetTimer, UpdateGifFrame, Off
+    if (pBitmap)
+        Gdip_DisposeImage(pBitmap)
+    Gdip_Shutdown(pToken)
+ExitApp
+Return
+
+; --- 菜单功能处理 ---
+UpdateBallStyle:
+    ; A_ThisMenuItem 是你点击的菜单项名称（即文件名）
+    BallImage := A_ThisMenuItem
+
+    ; 释放旧图片并加载新图片（兼容静态与动态图）
+    LoadBallImage(IconDir "\" BallImage)
+
+    ; 立即刷新显示
+    WinGetPos, curX, curY,,, ahk_id %hBall%
+    UpdateBallDisplay(hBall, pBitmap, curX, curY, BallSize, CurrentAlpha)
+    Var_Set(BallImage, "PokéBall.png", "BallImage", "基础配置", A_ScriptDir "\Settings.ini")
+return
+
+; --- 时间模式专属菜单功能 ---
+ToggleTimeFontBold:
+    TimeFontBold := (TimeFontBold = "1" ? "0" : "1")
+    Var_Set(TimeFontBold, "1", "TimeFontBold", "基础配置", A_ScriptDir "\Settings.ini")
+
+    ; 立即重新绘制时间条生效
+    WinGetPos, curX, curY,,, ahk_id %hBall%
+    UpdateBallDisplay(hBall, pBitmap, curX, curY, BallSize, CurrentAlpha)
+    GoSub, HandleSnapping ; 防越界
+return
+
+ToggleTimeBg:
+    EnableTimeBg := (EnableTimeBg = "1" ? "0" : "1")
+    Var_Set(EnableTimeBg, "1", "EnableTimeBg", "基础配置", A_ScriptDir "\Settings.ini")
+
+    ; 立即重新绘制时间条生效
+    WinGetPos, curX, curY,,, ahk_id %hBall%
+    UpdateBallDisplay(hBall, pBitmap, curX, curY, BallSize, CurrentAlpha)
+    GoSub, HandleSnapping ; 防越界
+return
+
+; 空动作：专门给被 Disable 的菜单项当占位符，防止 AHK 报缺失 Label 的错
+MenuDoNothing:
+return
+
+ToggleAlwaysOnTop:
+    IsAlwaysOnTop := (IsAlwaysOnTop = "1" ? "0" : "1")
+    WinSet, AlwaysOnTop, % (IsAlwaysOnTop = "1" ? "On" : "Off"), ahk_id %hBall%
+    Var_Set(IsAlwaysOnTop, "1", "IsAlwaysOnTop", "基础配置", A_ScriptDir "\Settings.ini")
+return
+
+ToggleEdgeHide:
+    EnableEdgeHide := (EnableEdgeHide = "1" ? "0" : "1")
+    ; 如果关闭了贴边隐藏，且当前是隐藏状态，立即显示出来
+    if (EnableEdgeHide = "0" && IsHidden)
+        GoSub, ShowBall
+    Var_Set(EnableEdgeHide, "1", "EnableEdgeHide", "基础配置", A_ScriptDir "\Settings.ini")
+return
+
+ToggleFullScreenHide:
+    HideInFullScreen := (HideInFullScreen = "1" ? "0" : "1")
+    ; 如果关闭了全屏隐藏，确保窗口显示
+    if (HideInFullScreen = "0" && IsFullScreenHidden) {
+        WinShow, ahk_id %hBall%
+        IsFullScreenHidden := false
+    }
+    Var_Set(HideInFullScreen, "1", "HideInFullScreen", "基础配置", A_ScriptDir "\Settings.ini")
+return
+
+ToggleCloseButton:
+    ShowCloseButton := (ShowCloseButton = "1" ? "0" : "1")
+    ;
+    if (ShowCloseButton = "0")
+        Gui, CloseBtn: Hide
+    Var_Set(ShowCloseButton, "1", "ShowCloseButton", "基础配置", A_ScriptDir "\Settings.ini")
+return
+
+ToggleLockPosition:
+    IsLocked := (IsLocked = "1" ? "0" : "1")
+    Var_Set(IsLocked, "0", "IsLocked", "基础配置", A_ScriptDir "\Settings.ini")
+return
+
+ToggleCloseBtnAction:
+    CloseBtnAction := (CloseBtnAction = "1" ? "0" : "1")
+    Var_Set(CloseBtnAction, "0", "CloseBtnAction", "基础配置", A_ScriptDir "\Settings.ini")
+return
+
+ResetPosition:
+    ; 获取屏幕工作区大小，计算中心坐标
+    SysGet, Mon, MonitorWorkArea
+    TargetX := MonLeft + (MonRight - MonLeft) / 2 - BallSize / 2
+    TargetY := MonTop + (MonBottom - MonTop) / 2 - BallSize / 2
+
+    ; 更新悬浮球位置
+    UpdateBallDisplay(hBall, pBitmap, TargetX, TargetY, BallSize, CurrentAlpha)
+
+    ; 同步写入配置，防止退出时被再次覆盖
+    Var_Set(TargetX, "", "GUI_X", "基础配置", A_ScriptDir "\Settings.ini")
+    Var_Set(TargetY, "", "GUI_Y", "基础配置", A_ScriptDir "\Settings.ini")
+return
+
+ResetSize:
+    BallSize := 50  ; 将悬浮球大小恢复为默认的 50
+    WinGetPos, curX, curY,,, ahk_id %hBall%
+    UpdateBallDisplay(hBall, pBitmap, curX, curY, BallSize, CurrentAlpha)
+
+    ; 写入配置并重新触发一次吸附检查防越界
+    Var_Set(BallSize, "50", "BallSize", "基础配置", A_ScriptDir "\Settings.ini")
+    GoSub, HandleSnapping
+return
+
+ResetAll:
+    ; 弹窗二次确认防误触 (276 = 问号图标 + 是/否按钮 + 默认选中第二按钮)
+    MsgBox, 276, 警告, 确定要重置所有设置并重启脚本吗？
+    IfMsgBox, Yes
+    {
+        ; 删除配置文件中的[基础配置]整个段落，然后重启脚本
+        IniDelete, %A_ScriptDir%\Settings.ini, 基础配置
+        Reload
+    }
+return
+
+EditConfig:
+    Run, "%A_ScriptDir%\Settings.ini"
+return
+
+ReloadScript:
+    Reload
+return
+
+ToggleSuspend:
+    ; 切换脚本挂起状态（暂停所有的热键响应）
+    Suspend, Toggle
+return
+
+; --- 新增托盘与滚轮设置选项路由 ---
+ToggleTrayIcon:
+    ShowTrayIcon := (ShowTrayIcon = "1" ? "0" : "1")
+    if (ShowTrayIcon = "1")
+        Menu, Tray, Icon
+    else
+        Menu, Tray, NoIcon
+    Var_Set(ShowTrayIcon, "1", "ShowTrayIcon", "基础配置", A_ScriptDir "\Settings.ini")
+return
+
+ToggleWheelResize:
+    EnableWheelResize := (EnableWheelResize = "1" ? "0" : "1")
+    Var_Set(EnableWheelResize, "1", "EnableWheelResize", "基础配置", A_ScriptDir "\Settings.ini")
+return
+
+ToggleDynamicOpacity:
+    EnableDynamicOpacity := (EnableDynamicOpacity = "1" ? "0" : "1")
+    Var_Set(EnableDynamicOpacity, "1", "EnableDynamicOpacity", "基础配置", A_ScriptDir "\Settings.ini")
+
+    ; 如果刚才是低透明度，关闭动态调整后立刻重绘一次恢复高亮
+    if (EnableDynamicOpacity = "0") {
+        CurrentAlpha := MaxOpacity
+        WinGetPos, curX, curY,,, ahk_id %hBall%
+        UpdateBallDisplay(hBall, pBitmap, curX, curY, BallSize, CurrentAlpha)
+    }
+return
+
+ToggleSaveSize:
+    SaveSize := (SaveSize = "1" ? "0" : "1")
+    Var_Set(SaveSize, "1", "SaveSize", "基础配置", A_ScriptDir "\Settings.ini")
+return
+
+ToggleSavePosition:
+    SavePosition := (SavePosition = "1" ? "0" : "1")
+    Var_Set(SavePosition, "1", "SavePosition", "基础配置", A_ScriptDir "\Settings.ini")
+return
+
+HideToTray:
+    if (ShowTrayIcon = "0") {
+        Menu, Tray, Icon ; 临时显示托盘图标，防止悬浮球和图标同时消失找不回来
+    }
+    WinHide, ahk_id %hBall%
+    WinHide, ahk_id %hCloseBtn%
+    TrayTip, 提示, 悬浮球已隐藏到托盘`n左键单击托盘图标恢复显示, 3, 1
+return
+
+ShowBallFromTray:
+    WinShow, ahk_id %hBall%
+    ; 如果之前是因为隐藏到托盘临时开启的图标，恢复原状
+    if (ShowTrayIcon = "0")
+        Menu, Tray, NoIcon
+    GoSub, HandleSnapping ; 防越界修正
+
+    ; 【新增】从托盘或快捷键恢复显示时，重新唤醒 GIF 动画
+    if (IsGif)
+        GoSub, UpdateGifFrame
+return
+
+ToggleHotkeyEnable:
+    EnableHotkey := (EnableHotkey = "1" ? "0" : "1")
+    if (ToggleHotkey != "") {
+        if (EnableHotkey = "1")
+            Hotkey, %ToggleHotkey%, On
+        else
+            Hotkey, %ToggleHotkey%, Off
+    }
+    Var_Set(EnableHotkey, "1", "EnableHotkey", "基础配置", A_ScriptDir "\Settings.ini")
+return
+
+ToggleBallVisibility:
+    ; 获取窗口当前的可见状态，实现类似托盘的隐藏/恢复
+    if DllCall("IsWindowVisible", "Ptr", hBall) {
+        GoSub, HideToTray
+    } else {
+        GoSub, ShowBallFromTray
+    }
+return
+
+ToggleEditMode:
+    IsEditMode := !IsEditMode
+    if (IsEditMode) {
+        ; 1. 强制设为最高透明度并立即更新
+        CurrentAlpha := MaxOpacity
+        WinGetPos, curX, curY,,, ahk_id %hBall%
+        UpdateBallDisplay(hBall, pBitmap, curX, curY, BallSize, CurrentAlpha)
+
+        ; 2. 创建美化的无边框半透明提示窗 (HUD样式，并开启鼠标穿透 +E0x20)
+        Gui, EditPrompt: Destroy
+        Gui, EditPrompt: +AlwaysOnTop +ToolWindow -Caption +E0x20 +HwndhEditGui
+        Gui, EditPrompt: Color, 2b2b2b
+        Gui, EditPrompt: Margin, 25, 20
+        Gui, EditPrompt: Font, s12 cWhite w700, 微软雅黑
+        Gui, EditPrompt: Add, Text, Center w200, 🛠️ 编 辑 模 式
+        Gui, EditPrompt: Font, s10 cAAAAAA w400
+        Gui, EditPrompt: Add, Text, Center w200 , [方向键] 移动位置`n[+ / -] 调整大小`n`n👉 右键点击悬浮球退出
+
+        ; 居中显示在屏幕顶部，不抢焦点
+        Gui, EditPrompt: Show, NoActivate y80, EditPromptGui
+        WinSet, Transparent, 230, ahk_id %hEditGui%
+    } else {
+        GoSub, ExitEditMode
+    }
+return
+
+ExitEditMode:
+    IsEditMode := 0
+    Gui, EditPrompt: Destroy ; 销毁美化版提示框
+    ToolTip, 已保存并退出编辑模式！
+    SetTimer, RemoveToolTip, -1500
+
+    ; 保存坐标和大小
+    Var_Set(BallSize, "50", "BallSize", "基础配置", A_ScriptDir "\Settings.ini")
+    WinGetPos, curX, curY,,, ahk_id %hBall%
+    Var_Set(curX, "", "GUI_X", "基础配置", A_ScriptDir "\Settings.ini")
+    Var_Set(curY, "", "GUI_Y", "基础配置", A_ScriptDir "\Settings.ini")
+return
+
+RemoveToolTip:
+    ToolTip
+return
+
+; 托盘图标消息回调函数 (拦截左键单击与右键单击)
+AHK_NOTIFYICON(wParam, lParam) {
+    if (lParam = 0x202) { ; WM_LBUTTONUP (左键松开)
+        SetTimer, ShowBallFromTray, -10
+        return 0
+    }
+    if (lParam = 0x205) { ; WM_RBUTTONUP (右键松开)
+        SetTimer, RightClickAction, -10 ; 直接复用悬浮球的右键菜单生成逻辑
+        return 0
+    }
+}
+
+获取悬浮球坐标_调整到屏幕内:
+    WinGetPos, nowX, nowY, nowW, nowH, ahk_id %hBall%
+    SysGet, Mon, MonitorWorkArea
+
+    curPadL := Round(ImgPadL_Ratio * BallSize)
+    curPadR := Round(ImgPadR_Ratio * BallSize)
+    curPadT := Round(ImgPadT_Ratio * BallSize)
+    curPadB := Round(ImgPadB_Ratio * BallSize)
+
+    if (nowX + curPadL < MonLeft)
+        nowX := MonLeft - curPadL + SnapRange + 1
+    if (nowX + nowW - curPadR > MonRight)
+        nowX := MonRight - nowW + curPadR - SnapRange
+    if (nowY + curPadT < MonTop)
+        nowY := MonTop - curPadT + SnapRange + 1
+    if (nowY + nowH - curPadB > MonBottom)
+        nowY := MonBottom - nowH + curPadB - SnapRange
+return
+
+; --- GDI+ 核心函数库（修复文字加粗与参数冲突版） ---
+UpdateBallDisplay(hwnd, pBitmap, x, y, size:=60, alpha:=255) {
+    ; 引入所有的全局变量
+    global DisplayMode, TimeFormat, TimeFont, TimeColor, EnableTimeBg, TimeBgColor
+    global TimeFontRatio, TimeFontBold, TimeCornerRatio, TimeOffsetY, TimePaddingX, TimePaddingY
+
+    ; 使用 static 变量锁定脚本启动时的初始 BallSize，专用于等比缩放留白与偏移量
+    static InitialSize := 0
+    if (InitialSize = 0 && size > 0) {
+        InitialSize := size
+    }
+
+    Ptr := A_PtrSize ? "UPtr" : "UInt"
+
+    if (DisplayMode = "Time") {
+        ; --- 1. 计算缩放后的所有尺寸 ---
+        ScaledFontSize := Round(size * TimeFontRatio)
+        Scale := (InitialSize > 0) ? (size / InitialSize) : 1
+        ScaledPaddingX := Round(TimePaddingX * Scale)
+        ScaledPaddingY := Round(TimePaddingY * Scale)
+        ScaledOffsetY  := Round(TimeOffsetY * Scale)
+
+        ; --- 2. 获取时间文本 ---
+        FormatTime, currentTime,, %TimeFormat%
+
+        ; --- 3. 借用屏幕 DC 预先测量排版宽高 ---
+        hDCScreen := DllCall("GetDC", Ptr, 0, Ptr)
+        GScreen := Gdip_GraphicsFromHDC(hDCScreen)
+        DllCall("gdiplus\GdipSetSmoothingMode", Ptr, GScreen, "Int", 4)
+
+        ; 【修复核心】：动态生成 GDI+ 能够识别的加粗参数字符串 ("Bold" 或 "Regular")
+        FontStyle := (TimeFontBold = "1") ? "Bold" : "Regular"
+
+        MeasureOptions := "s" ScaledFontSize " " FontStyle " Center VCenter"
+
+        MeasureBox := Gdip_TextToGraphics(GScreen, currentTime, MeasureOptions, TimeFont, 10000, 10000, 1)
+        StringSplit, mInfo, MeasureBox, |
+
+        TextW := Ceil(mInfo3)
+        TextH := Ceil(mInfo4)
+
+        Gdip_DeleteGraphics(GScreen)
+        DllCall("ReleaseDC", Ptr, 0, Ptr, hDCScreen)
+
+        ; --- 4. 计算最终包裹窗口的宽高 ---
+        RenderW := TextW + (ScaledPaddingX * 2)
+        RenderH := TextH + (ScaledPaddingY * 2)
+    } else {
+        ; 图片模式宽高
+        RenderW := size
+        RenderH := size
+    }
+
+    ; --- 5. 准备 GDI+ 画布 ---
+    VarSetCapacity(ptDst, 8)
+    NumPut(x, ptDst, 0, "Int"), NumPut(y, ptDst, 4, "Int")
+    VarSetCapacity(sizeDst, 8)
+    NumPut(RenderW, sizeDst, 0, "Int"), NumPut(RenderH, sizeDst, 4, "Int")
+    VarSetCapacity(ptSrc, 8, 0)
+
+    hDC := DllCall("GetDC", Ptr, 0, Ptr)
+    mDC := DllCall("CreateCompatibleDC", Ptr, hDC, Ptr)
+    hBM := DllCall("CreateCompatibleBitmap", Ptr, hDC, "Int", RenderW, "Int", RenderH, Ptr)
+    oBM := DllCall("SelectObject", Ptr, mDC, Ptr, hBM, Ptr)
+    G := Gdip_GraphicsFromHDC(mDC)
+    DllCall("gdiplus\GdipSetSmoothingMode", Ptr, G, "Int", 4)
+
+    if (DisplayMode = "Time") {
+        ; 画背景
+        if (EnableTimeBg = "1") {
+            pBrushBg := Gdip_BrushCreateSolid("0x" TimeBgColor)
+            CornerRadius := Round(RenderH * TimeCornerRatio)
+            Gdip_FillRoundedRectangle(G, pBrushBg, 0, 0, RenderW, RenderH, CornerRadius)
+            Gdip_DeleteBrush(pBrushBg)
+        }
+
+        ; 画文字：将坐标宽高与字号、样式参数完全分离，避免再次发生覆盖冲突
+        DrawOptions := "x0 y" ScaledOffsetY " w" RenderW " h" RenderH " Center VCenter c" TimeColor " s" ScaledFontSize " " FontStyle
+        Gdip_TextToGraphics(G, currentTime, DrawOptions, TimeFont, RenderW, RenderH)
+    } else {
+        DllCall("gdiplus\GdipSetInterpolationMode", Ptr, G, "Int", 7)
+        Gdip_DrawImage(G, pBitmap, 0, 0, RenderW, RenderH)
+    }
+
+    ; --- 6. 渲染到桌面 ---
+    DllCall("UpdateLayeredWindow", Ptr, hwnd, Ptr, hDC, Ptr, &ptDst, Ptr, &sizeDst, Ptr, mDC, Ptr, &ptSrc, "UInt", 0, "UInt*", alpha << 16 | 1 << 24, "UInt", 2)
+
+    Gdip_DeleteGraphics(G)
+    DllCall("SelectObject", Ptr, mDC, Ptr, oBM)
+    DllCall("DeleteObject", Ptr, hBM)
+    DllCall("DeleteDC", Ptr, mDC)
+    DllCall("ReleaseDC", Ptr, 0, Ptr, hDC)
+}
+
+; ==============================================================================
+; 新增：支持静态图片与 GIF 的统一加载函数
+; ==============================================================================
+LoadBallImage(imgPath) {
+    global pBitmap, IsGif, GifFrameCount, GifCurrentFrame, GifDelays, GifDimensionID
+
+    ; 清除旧资源与定时器
+    SetTimer, UpdateGifFrame, Off
+    if (pBitmap) {
+        Gdip_DisposeImage(pBitmap)
+        pBitmap := 0
+    }
+
+    pBitmap := Gdip_CreateBitmapFromFile(imgPath)
+    UpdateBitmapPadding() ; 【新增】首次运行，自动计算留边比例
+    if (!pBitmap)
+        return false
+
+    IsGif := false
+    SplitPath, imgPath,,, ext
+    if (ext = "gif") {
+        ; 获取 DimensionID (通常为 FrameDimensionTime 的 GUID)
+        DllCall("gdiplus\GdipImageGetFrameDimensionsList", "Ptr", pBitmap, "Ptr", &GifDimensionID, "UInt", 1)
+        ; 获取总帧数
+        DllCall("gdiplus\GdipImageGetFrameCount", "Ptr", pBitmap, "Ptr", &GifDimensionID, "UInt*", GifFrameCount)
+
+        if (GifFrameCount > 1) {
+            IsGif := true
+            GifCurrentFrame := 0
+            GifDelays := []
+
+            ; 获取 PropertyTagFrameDelay (0x5100)，读取各帧延迟
+            DllCall("gdiplus\GdipGetPropertyItemSize", "Ptr", pBitmap, "UInt", 0x5100, "UInt*", propSize)
+            if (propSize) {
+                VarSetCapacity(propItem, propSize, 0)
+                DllCall("gdiplus\GdipGetPropertyItem", "Ptr", pBitmap, "UInt", 0x5100, "UInt", propSize, "Ptr", &propItem)
+
+                ; PropertyItem 结构体在 32 位和 64 位下指针偏移不同 (32位偏移12, 64位偏移16)
+                valuePtr := NumGet(propItem, A_PtrSize = 8 ? 16 : 12, "Ptr")
+
+                Loop, % GifFrameCount {
+                    ; GDI+ 记录的延迟单位是 10 毫秒
+                    delay := NumGet(valuePtr + (A_Index - 1) * 4, "UInt") * 10
+                    ; 防止无延迟配置导致 CPU 满载，给个 30ms 的保底
+                    if (delay < 30)
+                        delay := 100
+                    GifDelays.Push(delay)
+                }
+            } else {
+                ; 兜底逻辑：如果 GIF 没有延迟属性信息，默认 100ms
+                Loop, % GifFrameCount
+                    GifDelays.Push(100)
+            }
+            ; 立即触发第一帧并启动循环
+            GoSub, UpdateGifFrame
+        }
+    }
+    return true
+}
+
+; 【新增】自动扫描当前图片的不透明主体边界，计算留边比例
+UpdateBitmapPadding() {
+    global pBitmap, ImgPadL_Ratio, ImgPadR_Ratio, ImgPadT_Ratio, ImgPadB_Ratio
+    if (!pBitmap) {
+        ImgPadL_Ratio := 0, ImgPadR_Ratio := 0, ImgPadT_Ratio := 0, ImgPadB_Ratio := 0
+        return
+    }
+
+    ; 获取图片原始宽高
+    DllCall("gdiplus\GdipGetImageWidth", "Ptr", pBitmap, "UInt*", w)
+    DllCall("gdiplus\GdipGetImageHeight", "Ptr", pBitmap, "UInt*", h)
+
+    minX := 0, maxX := w - 1
+    minY := 0, maxY := h - 1
+
+    ; 1. 从左向右扫描，找最左侧不透明边界 (minX)
+    found := false
+    Loop, %w% {
+        x := A_Index - 1
+        Loop, %h% {
+            y := A_Index - 1
+            DllCall("gdiplus\GdipBitmapGetPixel", "Ptr", pBitmap, "Int", x, "Int", y, "UInt*", ARGB)
+            if (((ARGB >> 24) & 0xFF) > 10) { ; Alpha 超过 10 视为有效内容
+                minX := x
+                found := true
+                break
+            }
+        }
+        if (found)
+            break
+    }
+
+    ; 2. 从右向左扫描，找最右侧不透明边界 (maxX)
+    found := false
+    Loop, %w% {
+        x := w - A_Index
+        Loop, %h% {
+            y := A_Index - 1
+            DllCall("gdiplus\GdipBitmapGetPixel", "Ptr", pBitmap, "Int", x, "Int", y, "UInt*", ARGB)
+            if (((ARGB >> 24) & 0xFF) > 10) {
+                maxX := x
+                found := true
+                break
+            }
+        }
+        if (found)
+            break
+    }
+
+    ; 3. 从上向下扫描，找最顶部不透明边界 (minY)
+    found := false
+    Loop, %h% {
+        y := A_Index - 1
+        Loop, %w% {
+            x := A_Index - 1
+            DllCall("gdiplus\GdipBitmapGetPixel", "Ptr", pBitmap, "Int", x, "Int", y, "UInt*", ARGB)
+            if (((ARGB >> 24) & 0xFF) > 10) {
+                minY := y
+                found := true
+                break
+            }
+        }
+        if (found)
+            break
+    }
+
+    ; 4. 从下向上扫描，找最底部不透明边界 (maxY)
+    found := false
+    Loop, %h% {
+        y := h - A_Index
+        Loop, %w% {
+            x := A_Index - 1
+            DllCall("gdiplus\GdipBitmapGetPixel", "Ptr", pBitmap, "Int", x, "Int", y, "UInt*", ARGB)
+            if (((ARGB >> 24) & 0xFF) > 10) {
+                maxY := y
+                found := true
+                break
+            }
+        }
+        if (found)
+            break
+    }
+
+    ; 计算不透明主体四周的留边占总宽高的比例
+    ImgPadL_Ratio := minX / w
+    ImgPadR_Ratio := (w - 1 - maxX) / w
+    ImgPadT_Ratio := minY / h
+    ImgPadB_Ratio := (h - 1 - maxY) / h
+}
+
+; 专门用于绘制漂亮的关闭按钮
+UpdateCloseBtnDisplay(hwnd,size:="24",CloseBtn_Thickness:="2", CloseBtn_VisualMargin:="5", isHovered:=false, alpha:=255) {
+    Ptr := A_PtrSize ? "UPtr" : "UInt"
+
+    hDC := DllCall("GetDC", Ptr, 0, Ptr)
+    mDC := DllCall("CreateCompatibleDC", Ptr, hDC, Ptr)
+    hBM := DllCall("CreateCompatibleBitmap", Ptr, hDC, "Int", size, "Int", size, Ptr)
+    oBM := DllCall("SelectObject", Ptr, mDC, Ptr, hBM, Ptr)
+    G := Gdip_GraphicsFromHDC(mDC)
+    DllCall("gdiplus\GdipSetSmoothingMode", Ptr, G, "Int", 4)
+
+    ; 绘制背景
+    ;colorBG := isHovered ? 0xFFE81123 : 0x88333333
+    ;pBrush := Gdip_BrushCreateSolid(colorBG)
+    ;Gdip_FillEllipse(G, pBrush, 0, 0, size-1, size-1)
+    ;Gdip_DeleteBrush(pBrush)
+
+    ; 绘制 X
+    colorX := isHovered ? 0xFFFF0000 : 0xFF808080  ; 红色 vs 灰色
+    pPen := Gdip_CreatePen(colorX, CloseBtn_Thickness)  ; 加粗线条
+    margin := CloseBtn_VisualMargin  ; 关闭按钮的视觉边距
+
+    Gdip_DrawLine(G, pPen, margin, margin, size-margin-1, size-margin-1)
+    Gdip_DrawLine(G, pPen, size-margin-1, margin, margin, size-margin-1)
+    Gdip_DeletePen(pPen)
+
+    ; 更新窗口
+    VarSetCapacity(ptSrc, 8, 0)
+    ; 注意这里的 Int64* 技巧，可以一次性传递 width 和 height
+    DllCall("UpdateLayeredWindow", Ptr, hwnd, Ptr, hDC, Ptr, 0, "Int64*", size|size<<32, Ptr, mDC, Ptr, &ptSrc, "UInt", 0, "UInt*", alpha << 16 | 1 << 24, "UInt", 2)
+
+    Gdip_DeleteGraphics(G)
+    DllCall("SelectObject", Ptr, mDC, Ptr, oBM)
+    DllCall("DeleteObject", Ptr, hBM)
+    DllCall("DeleteDC", Ptr, mDC)
+    DllCall("ReleaseDC", Ptr, 0, Ptr, hDC)
+}
+
+; 6. 底层 C++ / COM 接口模拟（兼容 32 位和 64 位 AHK）
+; =================================================================
+CreateDropTargetStruct() {
+    global IDropTarget_VTable, IDropTarget_Obj
+    ; IDropTarget 接口有 7 个方法，为其分配虚函数表 (VTable)
+    VarSetCapacity(IDropTarget_VTable, 7 * A_PtrSize, 0)
+
+    ; 将 AHK 函数绑定到 COM 对象的虚函数表
+    NumPut(RegisterCallback("IDropTarget_QueryInterface", "", 3), IDropTarget_VTable, 0 * A_PtrSize, "Ptr")
+    NumPut(RegisterCallback("IDropTarget_AddRef", "", 1),         IDropTarget_VTable, 1 * A_PtrSize, "Ptr")
+    NumPut(RegisterCallback("IDropTarget_Release", "", 1),        IDropTarget_VTable, 2 * A_PtrSize, "Ptr")
+    NumPut(RegisterCallback("IDropTarget_DragEnter", "", 6),      IDropTarget_VTable, 3 * A_PtrSize, "Ptr")
+    NumPut(RegisterCallback("IDropTarget_DragOver", "", 5),       IDropTarget_VTable, 4 * A_PtrSize, "Ptr")
+    NumPut(RegisterCallback("IDropTarget_DragLeave", "", 1),      IDropTarget_VTable, 5 * A_PtrSize, "Ptr")
+    NumPut(RegisterCallback("IDropTarget_Drop", "", 6),           IDropTarget_VTable, 6 * A_PtrSize, "Ptr")
+
+    VarSetCapacity(IDropTarget_Obj, A_PtrSize, 0)
+    NumPut(&IDropTarget_VTable, IDropTarget_Obj, 0, "Ptr")
+    return &IDropTarget_Obj
+}
+
+;═════════════════════════════════当前鼠标所指的窗口 ═════════════════════════════════════════════════
+MouseIsHwnd(hwnd) {
+    MouseGetPos,,, win
+    return (win = hwnd)
+}
+
+;[读取配置]
+Var_Read(rValue,defVar:="",Section名:="基础配置",Config:="个人配置.ini",是否删除默认项:="是",为空时是否重置为默认值:="是"){
+    IniRead, regVar,%Config%, %Section名%, %rValue%,% defVar ? defVar : A_Space
+
+    if(regVar!=""){
+        ; 【新增】：将 INI 中的安全占位符还原为真实的双行/多行换行符
+        regVar := StrReplace(regVar, "[CRLF]", "`n")
+
+        if(defVar!="" && regVar=defVar){
+            if (是否删除默认项 = "是")
+                IniDelete, %Config%, %Section名%, %rValue%
+            return defVar
+        }else
+            return regVar
+    }else{
+        if (是否删除默认项 = "是")
+            IniDelete, %Config%, %Section名%, %rValue%
+        if (为空时是否重置为默认值 = "是")
+            return defVar
+        return ""
+    }
+}
+
+;[写入配置]
+Var_Set(vGui, var, sz,Section名:="基础配置",Config:="个人配置.ini"){
+    StringCaseSense, On
+
+    ; 【新增】：将多行文本中的真实换行符转义为安全的单行占位符，防止破坏 INI 结构
+    vGui_safe := StrReplace(vGui, "`r`n", "[CRLF]")
+    vGui_safe := StrReplace(vGui_safe, "`n", "[CRLF]")
+
+    if(vGui_safe!=var)
+        IniWrite,%vGui_safe%,%Config%, %Section名%, %sz%
+    Else
+        IniDelete,%Config%,%Section名%, %sz%
+    StringCaseSense, Off
+}
+
+;═════════════════════════════════ 动作执行引擎 ═════════════════════════════════════════════════
+ExecuteAction(Enable, Type, Param, DropData := "", DropType := "") {
+    ; 如果未启用，或类型为 0，或类型为空，则什么都不做
+    if (Enable != "1" || Type == "0" || Type == "")
+        return
+
+    ; --- 调用引擎解析占位符，返回一个待执行数组 ---
+    CommandsToRun := ExpandPlaceholders(Param, DropData, DropType)
+
+    ; --- 循环执行数组中的每一条命令 ---
+    for index, FinalParam in CommandsToRun {
+
+        ; 【类别 6】单独处理：执行AHK代码 (保持原样，无需过滤，直接让 AHK 原生解释器处理注释)
+        if (Type == "6") {
+            tempScript := A_Temp "\FloatingBall_TempRun.ahk"
+            FileDelete, %tempScript%
+            FileAppend, %FinalParam%, %tempScript%
+            Run, "%A_AhkPath%" "%tempScript%"
+        }
+        ; 【类别 1-5】支持多行独立执行、支持注释和空行过滤
+        else {
+            ; 逐行解析当前参数
+            Loop, Parse, FinalParam, `n, `r
+            {
+                lineCmd := Trim(A_LoopField) ; 去除首尾空白符
+
+                ; 核心过滤逻辑：如果当前行是空行，或是以分号 ; 开头的注释，则直接跳过
+                if (lineCmd == "" || SubStr(lineCmd, 1, 1) == ";")
+                    continue
+
+                ; 根据对应类型执行当前有效行
+                if (Type == "1") {
+                    ; 1=运行程序/打开文件夹
+                    Run, %lineCmd%,, UseErrorLevel
+                }
+                else if (Type == "2") {
+                    ; 2=发送按键
+                    Send, %lineCmd%
+                }
+                else if (Type == "3") {
+                    ; 3=发送文本 (纯文本模式)
+                    SendRaw, %lineCmd%
+                }
+                else if (Type == "4") {
+                    ; 4=调用RunAny (使用动态调用防报错兼容)
+                    if IsFunc("RunAny_Send_WM_COPYDATA") {
+                        funcName := "RunAny_Send_WM_COPYDATA"
+                        %funcName%(lineCmd, "RunAny.ahk ahk_class AutoHotkey")
+                    } else {
+                        MsgBox, 48, 提示, 未找到 RunAny_ObjReg.ahk 库文件，无法执行调用。
+                    }
+                }
+                else if (Type == "5") {
+                    ; 5=内部命令
+                    if (lineCmd = "Reload")
+                        Reload
+                    else if (lineCmd = "ExitApp")
+                        ExitApp
+                }
+            }
+        }
+
+    }
+}
+
+; --- 拖放业务逻辑 ---
+OnDropFiles(FileList) {
+    global
+    finalEnable := DropFile_Enable, finalType := DropFile_Type, finalParam := DropFile_Param
+    if (GetKeyState("Ctrl", "P") && DropFile_Enable_ctrl == "1")
+        finalEnable := DropFile_Enable_ctrl, finalType := DropFile_Type_ctrl, finalParam := DropFile_Param_ctrl
+    else if (GetKeyState("Alt", "P") && DropFile_Enable_alt == "1")
+        finalEnable := DropFile_Enable_alt, finalType := DropFile_Type_alt, finalParam := DropFile_Param_alt
+    else if (GetKeyState("Shift", "P") && DropFile_Enable_shift == "1")
+        finalEnable := DropFile_Enable_shift, finalType := DropFile_Type_shift, finalParam := DropFile_Param_shift
+
+    ExecuteAction(finalEnable, finalType, finalParam, FileList, "File")
+}
+
+OnDropText(TextData) {
+    global
+    finalEnable := DropText_Enable, finalType := DropText_Type, finalParam := DropText_Param
+    if (GetKeyState("Ctrl", "P") && DropText_Enable_ctrl == "1")
+        finalEnable := DropText_Enable_ctrl, finalType := DropText_Type_ctrl, finalParam := DropText_Param_ctrl
+    else if (GetKeyState("Alt", "P") && DropText_Enable_alt == "1")
+        finalEnable := DropText_Enable_alt, finalType := DropText_Type_alt, finalParam := DropText_Param_alt
+    else if (GetKeyState("Shift", "P") && DropText_Enable_shift == "1")
+        finalEnable := DropText_Enable_shift, finalType := DropText_Type_shift, finalParam := DropText_Param_shift
+
+    ExecuteAction(finalEnable, finalType, finalParam, TextData, "Text")
+}
+
+; ==============================================================================
+; 优化后的选中文本/内容获取函数
+; ==============================================================================
+get_Selected(copyKey:="^c", time:="0.15", ByRef 判断内容类型:="") {
+    SavedSelected := ""
+    ClipSaved := ClipboardAll
+    clipboard := ""
+
+    ; 显式释放修饰键，防止发送按键时冲突
+    SendInput, {Shift up}{Ctrl up}{Alt up}
+    Sleep, 10
+
+    SendInput, %copyKey%
+    ClipWait, %time%, 1 ; 1表示等待任何数据（包含文件/文本）
+    SavedSelected := clipboard
+
+    if DllCall("IsClipboardFormatAvailable", "UInt", 15)
+        判断内容类型 := "文件"
+    else if DllCall("IsClipboardFormatAvailable", "UInt", 2)
+        判断内容类型 := "图片"
+    else if (SavedSelected != "")
+        判断内容类型 := "文本"
+    else
+        判断内容类型 := "空"
+
+    clipboard := ClipSaved
+    ClipSaved := ""
+
+    SendInput, {Shift up}{Ctrl up}{Alt up}
+    return SavedSelected
+}
+; ==============================================================================
+; 清理过期的落地临时文件 (仅保留最新生成的 N 个)
+; ==============================================================================
+CleanOldTempFiles(dir, prefix, maxCount) {
+    if (maxCount <= 0)
+        return
+
+    FileList := ""
+    ; 遍历目标目录下匹配前缀的所有 txt 文件
+    Loop, Files, %dir%\%prefix%*.txt
+    {
+        ; 格式：修改时间 + Tab符 + 完整路径
+        FileList .= A_LoopFileTimeModified "`t" A_LoopFileFullPath "`n"
+    }
+
+    if (FileList = "")
+        return
+
+    ; 使用 R 选项进行倒序排序（最新的时间戳会排在最上面）
+    Sort, FileList, R
+
+    ; 逐行解析，将超出保留名额的旧文件删除
+    Loop, Parse, FileList, `n, `r
+    {
+        if (A_LoopField = "")
+            continue
+
+        ; A_Index 表示当前是倒序后的第几个文件
+        if (A_Index > maxCount) {
+            ; 提取 Tab 符之后的文件路径
+            path := SubStr(A_LoopField, InStr(A_LoopField, "`t") + 1)
+            FileDelete, %path%
+        }
+    }
+}
+; ==============================================================================
+; 核心函数：ExpandPlaceholders (增强版 - 修复未匹配占位符残留问题)
+; 作用：解析用户命令参数，根据不同的占位符、拖放模式返回可执行的命令数组
+; ==============================================================================
+ExpandPlaceholders(Param, DropData, DropType) {
+    global
+    cmdList := []
+    TargetDir := A_ScriptDir "\Dropped"
+
+    ; --------------------------------------------------------------------------
+    ; 0. 系统与通用交互类占位符 (优先解析，防止干扰后续数据)
+    ; --------------------------------------------------------------------------
+    if InStr(Param, "{$Mouse") {
+        CoordMode, Mouse, Screen
+        MouseGetPos, mx, my
+        Param := StrReplace(Param, "{$MouseX$}", mx)
+        Param := StrReplace(Param, "{$MouseY$}", my)
+        if InStr(Param, "{$MouseColor$}") {
+            CoordMode, Pixel, Screen
+            PixelGetColor, mcolor, %mx%, %my%, RGB
+            Param := StrReplace(Param, "{$MouseColor$}", mcolor)
+        }
+    }
+
+    if InStr(Param, "{$ActiveWindow$}") {
+        WinGetActiveTitle, winTitle
+        Param := StrReplace(Param, "{$ActiveWindow$}", winTitle)
+    }
+    if InStr(Param, "{$ActiveProcess$}") {
+        WinGet, winProc, ProcessName, A
+        Param := StrReplace(Param, "{$ActiveProcess$}", winProc)
+    }
+    if InStr(Param, "{$ActiveClass$}") {
+        WinGetClass, winClass, A
+        Param := StrReplace(Param, "{$ActiveClass$}", winClass)
+    }
+
+    while RegExMatch(Param, "i)\{\$Env:([^$]+)\$\}", match) {
+        EnvGet, envVal, %match1%
+        Param := StrReplace(Param, match, envVal)
+    }
+
+    while RegExMatch(Param, "i)\{\$inputbox\|([^|]*)\|([^|]*)\|([^$]*)\$\}", match) {
+        InputBox, userInput, %match2%, %match3%, , , , , , , , %match1%
+        if ErrorLevel
+            return [] ; 用户取消输入，中断本次动作执行
+        Param := StrReplace(Param, match, userInput)
+    }
+
+    if InStr(Param, "{$SelectFolder$}") {
+        FileSelectFolder, selectedFolder, , 3, 请选择文件夹
+        if (selectedFolder = "")
+            return []
+        Param := StrReplace(Param, "{$SelectFolder$}", selectedFolder)
+    }
+
+    ; --------------------------------------------------------------------------
+    ; 1. 预处理：【拖放版占位符】向【基础占位符】的映射转换
+    ; --------------------------------------------------------------------------
+    if (DropType = "File") {
+        Param := StrReplace(Param, "{$Dropped$}", "{$Dropped_file$}")
+        Param := StrReplace(Param, "{$Dropped_loop$}", "{$Dropped_file_loop$}")
+        if RegExMatch(Param, "i)\{\$Dropped_all\$(\|.*?)?\}", m)
+            Param := StrReplace(Param, m, StrReplace(m, "Dropped_all", "Dropped_allfile"))
+        Param := StrReplace(Param, "{$Droppedtofile$}", "{$Dropped_filetofile$}")
+    } else if (DropType = "Text") {
+        Param := StrReplace(Param, "{$Dropped$}", "{$Dropped_text$}")
+        Param := StrReplace(Param, "{$Dropped_loop$}", "{$Dropped_text_loop$}")
+        if RegExMatch(Param, "i)\{\$Dropped_all\$(\|.*?)?\}", m)
+            Param := StrReplace(Param, m, StrReplace(m, "Dropped_all", "Dropped_alltext"))
+        Param := StrReplace(Param, "{$Droppedtofile$}", "{$Dropped_texttofile$}")
+    }
+
+    ; --------------------------------------------------------------------------
+    ; 2. 预处理：解析动态环境变量占位符
+    ; --------------------------------------------------------------------------
+    while RegExMatch(Param, "i)\{\$AHK_Var\|(.*?)\$\}", match) {
+        varName := match1, varValue := ""
+        if (varName != "")
+            varValue := %varName%
+        Param := StrReplace(Param, match, varValue)
+    }
+
+    ; --------------------------------------------------------------------------
+    ; 3. 处理【不循环】类型的 Drop 数据
+    ; --------------------------------------------------------------------------
+    if InStr(Param, "{$Dropped_file$}")
+        Param := StrReplace(Param, "{$Dropped_file$}", DropData)
+    if InStr(Param, "{$Dropped_text$}")
+        Param := StrReplace(Param, "{$Dropped_text$}", DropData)
+
+    if RegExMatch(Param, "i)\{\$Dropped_allfile\$(\|.*?)?\}", match) {
+        sep := match1 ? SubStr(match1, 2) : " "
+        allPaths := ""
+        Loop, Parse, DropData, `n, `r
+        {
+            if (A_LoopField != "")
+                allPaths .= (allPaths = "" ? "" : sep) . """" . A_LoopField . """"
+        }
+        Param := StrReplace(Param, match, allPaths)
+    }
+    if RegExMatch(Param, "i)\{\$Dropped_alltext\$(\|.*?)?\}", match) {
+        sep := match1 ? SubStr(match1, 2) : " "
+        allText := ""
+        Loop, Parse, DropData, `n, `r
+        {
+            if (A_LoopField != "")
+                allText .= (allText = "" ? "" : sep) . A_LoopField
+        }
+        Param := StrReplace(Param, match, allText)
+    }
+
+    if InStr(Param, "{$Dropped_filetofile$}") {
+        if !InStr(FileExist(TargetDir), "D")
+            FileCreateDir, %TargetDir%
+        tempFile := TargetDir "\DropPaths_" A_TickCount ".txt"
+        FileDelete, %tempFile%
+        FileAppend, %DropData%, %tempFile%, UTF-8
+
+        ; 触发清理旧文件
+        CleanOldTempFiles(TargetDir, "DropPaths_", MaxTempFiles)
+
+        Param := StrReplace(Param, "{$Dropped_filetofile$}", tempFile)
+    }
+    if InStr(Param, "{$Dropped_texttofile$}") {
+        if !InStr(FileExist(TargetDir), "D")
+            FileCreateDir, %TargetDir%
+        tempFile := TargetDir "\DropText_" A_TickCount ".txt"
+        FileDelete, %tempFile%
+        FileAppend, %DropData%, %tempFile%, UTF-8
+
+        ; 触发清理旧文件
+        CleanOldTempFiles(TargetDir, "DropText_", MaxTempFiles)
+
+        Param := StrReplace(Param, "{$Dropped_texttofile$}", tempFile)
+    }
+
+    ; --- 新增：处理【拖入文件_获取第一行文件属性】相关的占位符 ---
+    if InStr(Param, "{$Dropped_file_f_") {
+        firstLine := ""
+        Loop, Parse, DropData, `n, `r
+        {
+            if (A_LoopField != "") {
+                firstLine := A_LoopField
+                break
+            }
+        }
+        SplitPath, firstLine, f_name, f_dir, f_ext, f_nameNoExt, f_drive
+        RegExMatch(f_dir, "[^\\]+$", f_dirname)
+
+        Param := StrReplace(Param, "{$Dropped_file_f_path$}", firstLine)
+        Param := StrReplace(Param, "{$Dropped_file_f_name$}", f_name)
+        Param := StrReplace(Param, "{$Dropped_file_f_dir$}", f_dir)
+        Param := StrReplace(Param, "{$Dropped_file_f_ext$}", f_ext)
+        Param := StrReplace(Param, "{$Dropped_file_f_nameNoExt$}", f_nameNoExt)
+        Param := StrReplace(Param, "{$Dropped_file_f_drive$}", f_drive)
+        Param := StrReplace(Param, "{$Dropped_file_f_dirname$}", f_dirname)
+    }
+
+    ; --------------------------------------------------------------------------
+    ; 4. 处理【Selected 原地获取内容】相关的占位符 (非循环部分)
+    ; --------------------------------------------------------------------------
+    selText := ""
+    if RegExMatch(Param, "i)\{\$Selected(_[^$]+)?\$\}") {
+        ; 【修改】：将原本无参的调用改为传入配置好的变量
+        selText := get_Selected(SelectedCopyKey, SelectedWaitTime)
+
+        if InStr(Param, "{$Selected$}")
+            Param := StrReplace(Param, "{$Selected$}", selText)
+
+        if InStr(Param, "{$Selectedtofile$}") {
+            if !InStr(FileExist(TargetDir), "D")
+                FileCreateDir, %TargetDir%
+            tempFile := TargetDir "\Selected_" A_TickCount ".txt"
+            FileDelete, %tempFile%
+            FileAppend, %selText%, %tempFile%, UTF-8
+
+            ; 触发清理旧文件
+            CleanOldTempFiles(TargetDir, "Selected_", MaxTempFiles)
+
+            Param := StrReplace(Param, "{$Selectedtofile$}", tempFile)
+        }
+
+        if RegExMatch(Param, "i)\{\$Selected_all(\|.*?)?\}", match) {
+            sep := match1 ? SubStr(match1, 2) : " "
+            combined := ""
+            Loop, Parse, selText, `n, `r
+            {
+                if (A_LoopField != "")
+                    combined .= (combined = "" ? "" : sep) . """" . A_LoopField . """"
+            }
+            Param := StrReplace(Param, match, combined)
+        }
+
+        if InStr(Param, "{$Selected_f_") {
+            firstLine := ""
+            Loop, Parse, selText, `n, `r
+            {
+                if (A_LoopField != "") {
+                    firstLine := A_LoopField
+                    break
+                }
+            }
+            SplitPath, firstLine, f_name, f_dir, f_ext, f_nameNoExt, f_drive
+            RegExMatch(f_dir, "[^\\]+$", f_dirname)
+
+            Param := StrReplace(Param, "{$Selected_f_path$}", firstLine)
+            Param := StrReplace(Param, "{$Selected_f_name$}", f_name)
+            Param := StrReplace(Param, "{$Selected_f_dir$}", f_dir)
+            Param := StrReplace(Param, "{$Selected_f_ext$}", f_ext)
+            Param := StrReplace(Param, "{$Selected_f_nameNoExt$}", f_nameNoExt)
+            Param := StrReplace(Param, "{$Selected_f_drive$}", f_drive)
+            Param := StrReplace(Param, "{$Selected_f_dirname$}", f_dirname)
+        }
+    }
+
+    ; --------------------------------------------------------------------------
+    ; 5. 处理【带有 _loop 标记的循环】类型占位符
+    ; --------------------------------------------------------------------------
+    hasDropLoop := InStr(Param, "{$Dropped_file_loop$}") || InStr(Param, "{$Dropped_text_loop$}")
+    hasSelLoop  := InStr(Param, "{$Selected_loop")
+
+    if (hasDropLoop) {
+        Loop, Parse, DropData, `n, `r
+        {
+            if (A_LoopField = "")
+                continue
+            line := A_LoopField
+            currentCmd := Param
+
+            if InStr(currentCmd, "{$Dropped_file_loop") {
+                SplitPath, line, l_name, l_dir, l_ext, l_nameNoExt, l_drive
+                RegExMatch(l_dir, "[^\\]+$", l_dirname)
+
+                l_dbl := StrReplace(line, "\", "\\")
+                l_dbl_bs := StrReplace(line, "/", "\")
+
+                currentCmd := StrReplace(currentCmd, "{$Dropped_file_loop$}", line)
+                currentCmd := StrReplace(currentCmd, "{$Dropped_file_loop_dbl$}", l_dbl)
+                currentCmd := StrReplace(currentCmd, "{$Dropped_file_loop_dbl_bs$}", l_dbl_bs)
+                currentCmd := StrReplace(currentCmd, "{$Dropped_file_loop_name$}", l_name)
+                currentCmd := StrReplace(currentCmd, "{$Dropped_file_loop_dir$}", l_dir)
+                currentCmd := StrReplace(currentCmd, "{$Dropped_file_loop_ext$}", l_ext)
+                currentCmd := StrReplace(currentCmd, "{$Dropped_file_loop_nameNoExt$}", l_nameNoExt)
+                currentCmd := StrReplace(currentCmd, "{$Dropped_file_loop_drive$}", l_drive)
+                currentCmd := StrReplace(currentCmd, "{$Dropped_file_loop_dirname$}", l_dirname)
+            }
+
+            if InStr(currentCmd, "{$Dropped_text_loop$}")
+                currentCmd := StrReplace(currentCmd, "{$Dropped_text_loop$}", line)
+
+            cmdList.Push(currentCmd)
+        }
+    } else if (hasSelLoop && selText != "") {
+        Loop, Parse, selText, `n, `r
+        {
+            if (A_LoopField = "")
+                continue
+            line := A_LoopField
+            currentCmd := Param
+
+            SplitPath, line, l_name, l_dir, l_ext, l_nameNoExt, l_drive
+            RegExMatch(l_dir, "[^\\]+$", l_dirname)
+
+            l_dbl := StrReplace(line, "\", "\\")
+            l_dbl_bs := StrReplace(line, "/", "\")
+
+            currentCmd := StrReplace(currentCmd, "{$Selected_loop$}", line)
+            currentCmd := StrReplace(currentCmd, "{$Selected_loop_dbl$}", l_dbl)
+            currentCmd := StrReplace(currentCmd, "{$Selected_loop_dbl_bs$}", l_dbl_bs)
+            currentCmd := StrReplace(currentCmd, "{$Selected_loop_name$}", l_name)
+            currentCmd := StrReplace(currentCmd, "{$Selected_loop_dir$}", l_dir)
+            currentCmd := StrReplace(currentCmd, "{$Selected_loop_ext$}", l_ext)
+            currentCmd := StrReplace(currentCmd, "{$Selected_loop_nameNoExt$}", l_nameNoExt)
+            currentCmd := StrReplace(currentCmd, "{$Selected_loop_drive$}", l_drive)
+            currentCmd := StrReplace(currentCmd, "{$Selected_loop_dirname$}", l_dirname)
+
+            cmdList.Push(currentCmd)
+        }
+    } else {
+        ; 没有循环标记，或者开启了循环但是缺少有效数据源（比如空选取），存入原始队列
+        cmdList.Push(Param)
+    }
+
+    ; 遍历执行队列，使用正则表达式找出所有未被成功替换的 {$xxx$} 标签，直接替换为空
+    for index, finalCmd in cmdList {
+        cmdList[index] := RegExReplace(finalCmd, "i)\{\$.*?\$\}", "")
+    }
+
+    return cmdList
+}
+
+; ==============================================================================
+; 再次优化：微调纵向间距，解决第一行贴顶问题
+; ==============================================================================
+ShowEventSettingsGUI:
+    global hEventGui, pToken
+    if WinExist("ahk_id " hEventGui) {
+        Gui, EventSettings: show
+        return
+    }
+
+    Events := ["左键单击", "中键单击", "滚轮向上", "滚轮向下", "拖放_文件", "拖放_文本"]
+    Sections := ["左键单击事件", "中键单击事件", "滚轮向上事件", "滚轮向下事件", "拖放事件_文件", "拖放事件_文本"]
+    Prefixes := ["LBtn", "MBtn", "WheelUp", "WheelDown", "DropFile", "DropText"]
+    TypeDesc := "1=运行程序/打开文件夹|2=发送按键|3=发送文本|4=调用RunAny|5=内部命令|6=执行AHK代码"
+
+    ; 保持全宽 720，高度稍微撑大 10px 到 325，给内部留出向下挪动的空间
+    Gui, EventSettings: New, +HwndhEventGui -Caption
+    Gui, EventSettings: Color, 2B2B2B
+    Gui, EventSettings: Margin, 0, 0
+
+    W := 720, H := 325
+    SetWindowRgn(hEventGui, W, H, 20)
+    DrawRoundedBackground_API(hEventGui, W, H, 15, 0xFF2B2B2B, 0xFF3D3D3D)
+
+    Gui, EventSettings: Font, s12 cWhite w700, 微软雅黑
+    Gui, EventSettings: Add, Text, x20 y5 w680 h40 BackgroundTrans gGuiDrag, 悬浮球事件高级设置
+
+    ; Tab 高度同步撑大到 215
+    ; ... (保留前置的背景绘制和Tab声明代码) ...
+    Gui, EventSettings: Font, s9 cAAAAAA w400, 微软雅黑
+    Gui, EventSettings: Add, Tab3, x15 y45 w690 h215 cWhite, 左键单击|中键单击|滚轮向上|滚轮向下|拖放文件|拖放文本
+
+    Loop, 6 {
+        idx := A_Index
+        pref := Prefixes[idx]
+        Gui, EventSettings: Tab, %idx%
+
+        ; 提取内存变量
+        curEnable := %pref%_Enable, curType := %pref%_Type, curParam := %pref%_Param
+        curEnableCtrl := %pref%_Enable_ctrl, curTypeCtrl := %pref%_Type_ctrl, curParamCtrl := %pref%_Param_ctrl
+        curEnableAlt := %pref%_Enable_alt, curTypeAlt := %pref%_Type_alt, curParamAlt := %pref%_Param_alt
+        curEnableShift := %pref%_Enable_shift, curTypeShift := %pref%_Type_shift, curParamShift := %pref%_Param_shift
+
+        ; --- 第 1 行：无修饰键 (Y基准下移至 80) ---
+        Gui, EventSettings: Add, Text, x20 y83 cWhite w75, 【无修饰键】
+        Gui, EventSettings: Add, Checkbox, % "x95 y83 w45 v" pref "_EnableChecked " (curEnable="1" ? "Checked" : ""), 启用
+        Gui, EventSettings: Add, DropDownList, % "x140 y80 w130 v" pref "_TypeChoice Choose" curType, %TypeDesc%
+        Gui, EventSettings: Add, Edit, % "x275 y80 w285 h25 v" pref "_ParamEdit cBlack", %curParam%
+        Gui, EventSettings: Add, Button, % "x565 y79 w30 h25 gOpenLargeEditor vBtnEdit_" pref "_ParamEdit", 📝
+        Gui, EventSettings: Add, Button, % "x600 y79 w40 h25 gTestRunParam vBtnRun_" pref "_ParamEdit", ▶
+        Gui, EventSettings: Add, Button, % "x645 y79 w40 h25 gTestParseParam vBtnParse_" pref "_ParamEdit", 🔍
+
+        ; --- 第 2 行：按住 Ctrl (Y基准: 125) ---
+        Gui, EventSettings: Add, Text, x20 y128 c00CCFF w75, 【按住 Ctrl】
+        Gui, EventSettings: Add, Checkbox, % "x95 y128 w45 v" pref "_EnableCtrlChecked " (curEnableCtrl="1" ? "Checked" : ""), 启用
+        Gui, EventSettings: Add, DropDownList, % "x140 y125 w130 v" pref "_TypeCtrlChoice Choose" curTypeCtrl, %TypeDesc%
+        Gui, EventSettings: Add, Edit, % "x275 y125 w285 h25 v" pref "_ParamCtrlEdit cBlack", %curParamCtrl%
+        Gui, EventSettings: Add, Button, % "x565 y124 w30 h25 gOpenLargeEditor vBtnEdit_" pref "_ParamCtrlEdit", 📝
+        Gui, EventSettings: Add, Button, % "x600 y124 w40 h25 gTestRunParam vBtnRun_" pref "_ParamCtrlEdit", ▶
+        Gui, EventSettings: Add, Button, % "x645 y124 w40 h25 gTestParseParam vBtnParse_" pref "_ParamCtrlEdit", 🔍
+
+        ; --- 第 3 行：按住 Alt (Y基准: 170) ---
+        Gui, EventSettings: Add, Text, x20 y173 cFFB000 w75, 【按住 Alt】
+        Gui, EventSettings: Add, Checkbox, % "x95 y173 w45 v" pref "_EnableAltChecked " (curEnableAlt="1" ? "Checked" : ""), 启用
+        Gui, EventSettings: Add, DropDownList, % "x140 y170 w130 v" pref "_TypeAltChoice Choose" curTypeAlt, %TypeDesc%
+        Gui, EventSettings: Add, Edit, % "x275 y170 w285 h25 v" pref "_ParamAltEdit cBlack", %curParamAlt%
+        Gui, EventSettings: Add, Button, % "x565 y169 w30 h25 gOpenLargeEditor vBtnEdit_" pref "_ParamAltEdit", 📝
+        Gui, EventSettings: Add, Button, % "x600 y169 w40 h25 gTestRunParam vBtnRun_" pref "_ParamAltEdit", ▶
+        Gui, EventSettings: Add, Button, % "x645 y169 w40 h25 gTestParseParam vBtnParse_" pref "_ParamAltEdit", 🔍
+
+        ; --- 第 4 行：按住 Shift (Y基准: 215) ---
+        Gui, EventSettings: Add, Text, x20 y218 c00FF66 w75, 【按住Shift】
+        Gui, EventSettings: Add, Checkbox, % "x95 y218 w45 v" pref "_EnableShiftChecked " (curEnableShift="1" ? "Checked" : ""), 启用
+        Gui, EventSettings: Add, DropDownList, % "x140 y215 w130 v" pref "_TypeShiftChoice Choose" curTypeShift, %TypeDesc%
+        Gui, EventSettings: Add, Edit, % "x275 y215 w285 h25 v" pref "_ParamShiftEdit cBlack", %curParamShift%
+        Gui, EventSettings: Add, Button, % "x565 y214 w30 h25 gOpenLargeEditor vBtnEdit_" pref "_ParamShiftEdit", 📝
+        Gui, EventSettings: Add, Button, % "x600 y214 w40 h25 gTestRunParam vBtnRun_" pref "_ParamShiftEdit", ▶
+        Gui, EventSettings: Add, Button, % "x645 y214 w40 h25 gTestParseParam vBtnParse_" pref "_ParamShiftEdit", 🔍
+    }
+
+    ; 底部保存/应用/取消按钮顺应窗口高度下移到 275
+    Gui, EventSettings: Tab
+    Gui, EventSettings: Add, Button, x15 y275 w110 h30 gShowPlaceholderHelp, ❓ 占位符说明
+    Gui, EventSettings: Add, Button, x435 y275 w80 h30 Default gSaveEventSettings, 确定
+    Gui, EventSettings: Add, Button, x530 y275 w80 h30 gApplyEventSettings, 应用
+    Gui, EventSettings: Add, Button, x625 y275 w80 h30 gCancelEventSettings, 取消
+
+    Gui, EventSettings: Show, w%W% h%H%, 悬浮球事件设置
+return
+; ==============================================================================
+; 附加功能：呼出多行大编辑框 (已去除提示文本，布局重新自适应)
+; ==============================================================================
+OpenLargeEditor:
+    ; 获取目标变量名并提取文本内容
+    TargetEditVar := SubStr(A_GuiControl, 9)
+    GuiControlGet, CurrentText, EventSettings:, %TargetEditVar%
+
+    ; 禁用主面板
+    Gui, EventSettings: +Disabled
+
+    Gui, LargeEditor: Destroy
+
+    Gui, LargeEditor: +OwnerEventSettings +Resize +MaximizeBox
+    Gui, LargeEditor: Color, 2B2B2B
+    ; 【修改】：边距极度紧凑化 (原为 15, 15)
+    Gui, LargeEditor: Margin, 4, 4
+
+    Gui, LargeEditor: Font, s10 cBlack w400, 微软雅黑
+    Gui, LargeEditor: Add, Edit, w800 h500 vLargeEditText Multi VScroll HScroll, %CurrentText%
+
+    Gui, LargeEditor: Font, s9 cBlack w400, 微软雅黑
+
+    ; 【新增】：在左侧添加占位符说明按钮
+    Gui, LargeEditor: Add, Button, x4 y530 w110 h30 gShowPlaceholderHelp vBtnLargeHelp, ❓ 占位符说明
+
+    ; 【新增】：在确定按钮左侧添加执行和解析按钮 (复用原有的 g 标签)
+    Gui, LargeEditor: Add, Button, x524 y530 w40 h30 gTestRunParam vBtnLargeRun, ▶
+    Gui, LargeEditor: Add, Button, x572 y530 w40 h30 gTestParseParam vBtnLargeParse, 🔍
+
+    Gui, LargeEditor: Add, Button, x620 y530 w100 h30 Default gSaveLargeEditor vBtnSave, 确定保存
+    Gui, LargeEditor: Add, Button, x730 y530 w100 h30 gCancelLargeEditor vBtnCancel, 取消
+
+    Gui, LargeEditor: Show, Center, 展开编辑
+return
+
+SaveLargeEditor:
+    Gui, LargeEditor: Submit, NoHide
+    ; 将大编辑框内的新文本，同步写回主面板对应的单行输入框中
+    GuiControl, EventSettings:, %TargetEditVar%, %LargeEditText%
+
+    Gui, EventSettings: -Disabled
+    Gui, LargeEditor: Destroy
+return
+
+CancelLargeEditor:
+LargeEditorGuiEscape:
+LargeEditorGuiClose:
+    Gui, EventSettings: -Disabled
+    Gui, LargeEditor: Destroy
+return
+
+; ==============================================================================
+; 参数实时解析与测试功能
+; ==============================================================================
+TestParseParam:
+TestRunParam:
+    ; 判断当前点击的是“解析”还是“执行”按钮
+    IsRunMode := (A_ThisLabel = "TestRunParam")
+
+    ; 【新增】判断触发来源是主面板还是大编辑框
+    if (A_Gui = "LargeEditor") {
+        ; 1. 如果来自大编辑框，直接获取大编辑框的内容
+        Gui, LargeEditor: Submit, NoHide
+        RawParam := LargeEditText
+
+        ; 2. TargetEditVar 在 OpenLargeEditor 时已被全局记录，据此推算对应的下拉框变量
+        TargetTypeVar := StrReplace(TargetEditVar, "Param", "Type")
+        TargetTypeVar := StrReplace(TargetTypeVar, "Edit", "Choice")
+
+        ; 3. 由于下拉框在 EventSettings 面板中，使用 GuiControlGet 获取其值
+        GuiControlGet, RawType, EventSettings:, %TargetTypeVar%
+
+    } else {
+        ; 1. 原始逻辑：从触发控件的 vLabel (例如 vBtnRun_LBtn_ParamEdit) 提取真正的 Edit 控件名
+        ActionPrefix := SubStr(A_GuiControl, 1, InStr(A_GuiControl, "_", false, 1, 1))
+        TargetEditVar := SubStr(A_GuiControl, StrLen(ActionPrefix) + 1)
+
+        ; 2. 获取该输入框的实时内容
+        Gui, EventSettings: Submit, NoHide
+        RawParam := %TargetEditVar%
+
+        ; 3. 获取同级别的下拉框类型
+        TargetTypeVar := StrReplace(TargetEditVar, "Param", "Type")
+        TargetTypeVar := StrReplace(TargetTypeVar, "Edit", "Choice")
+        RawType := %TargetTypeVar%
+    }
+
+    RegExMatch(RawType, "^\d+", CleanType) ; 提取纯数字 Type
+
+    ; 4. 若为拖放事件，则提供一些测试桩数据 (Dummy Data) 以便测试
+    dummyDropData := ""
+    dummyDropType := ""
+    if InStr(TargetEditVar, "DropFile") {
+        dummyDropData := A_WinDir "\notepad.exe`n" A_WinDir "\explorer.exe"
+        dummyDropType := "File"
+    } else if InStr(TargetEditVar, "DropText") {
+        dummyDropData := "【这是模拟的拖放文本片段第一行】`n【这是第二行】"
+        dummyDropType := "Text"
+    }
+
+    ; 5. 调用核心引擎解析占位符
+    parsedArr := ExpandPlaceholders(RawParam, dummyDropData, dummyDropType)
+
+    ; 6. 构造输出信息
+    outStr := "【原始配置参数】:`n" RawParam "`n`n"
+    if (dummyDropData != "")
+        outStr .= "【注入的模拟输入数据】:`n" dummyDropData "`n`n"
+
+    outStr .= "【最终解析结果】 (共 " parsedArr.MaxIndex() " 条指令):`n"
+    for k, v in parsedArr
+        outStr .= k ". " v "`n"
+
+    ; 7. 弹窗展现或执行 (支持鼠标划选复制 + 动态调整窗口大小)
+    Gui, ParsePreview: Destroy
+
+    Gui, ParsePreview: +OwnerEventSettings +Resize +MaximizeBox
+    Gui, ParsePreview: Color, 2B2B2B
+    ; 【修改】：边距缩短为 4
+    Gui, ParsePreview: Margin, 4, 4
+
+    if (IsRunMode) {
+        if (CleanType = "0" || CleanType = "") {
+            MsgBox, 48, 提示, 当前选择的功能类型为【无】，无法执行测试。
+            return
+        }
+
+        Gui, ParsePreview: Font, s11 cFF5555 w700, 微软雅黑
+        Gui, ParsePreview: Add, Text, w550, ⚠️ 是否要以类型 [%CleanType%] 立即执行以下命令？
+
+        Gui, ParsePreview: Font, s10 cBlack w400, 微软雅黑
+        ; 【修改】：纵向间距从 y+10 缩小为 y+6
+        Gui, ParsePreview: Add, Edit, cWhite y+6 w550 h250 ReadOnly Multi vPreviewEdit VScroll HScroll, %outStr%
+
+        Gui, ParsePreview: Font, s9 cWhite w400, 微软雅黑
+        ; 【修改】：纵向间距缩小为 y+8
+        Gui, ParsePreview: Add, Button, x340 y+8 w100 h30 Default gConfirmRunTest vBtnPreviewConfirm, 确认执行
+        Gui, ParsePreview: Add, Button, x444 yp w100 h30 gCloseParsePreview vBtnPreviewCancel, 取消
+        Gui, ParsePreview: Show, Center, 测试与执行
+
+        ; 保存参数供下方确认执行标签使用
+        TestRun_Type := CleanType
+        TestRun_Param := RawParam
+        TestRun_DropData := dummyDropData
+        TestRun_DropType := dummyDropType
+    } else {
+        Gui, ParsePreview: Font, s11 cWhite w700, 微软雅黑
+        Gui, ParsePreview: Add, Text, w550, 🔍 解析结果预览
+
+        Gui, ParsePreview: Font, s10 cBlack w400, 微软雅黑
+        ; 【修改】：纵向间距从 y+10 缩小为 y+6
+        Gui, ParsePreview: Add, Edit, cWhite y+6 w550 h250 ReadOnly Multi vPreviewEdit VScroll HScroll, %outStr%
+
+        Gui, ParsePreview: Font, s9 cWhite w400, 微软雅黑
+        ; 【修改】：纵向间距缩小为 y+8
+        Gui, ParsePreview: Add, Button, x444 y+8 w100 h30 Default gCloseParsePreview vBtnPreviewClose, 关闭
+        Gui, ParsePreview: Show, Center, 仅解析预览
+    }
+return
+
+; ==============================================================================
+; 监听解析预览窗口的大小改变事件
+; ==============================================================================
+ParsePreviewGuiSize:
+    if (A_EventInfo = 1) ; 窗口最小化时不处理
+        return
+
+    ; 【修改】：1. 动态计算 Edit 文本框的大小
+    ; 宽度: 减去左右边距各4 (共8)
+    ; 高度: 扣除顶边距(4)、文字高(约20)、间距(6)、按钮(30)、底边距(4)，综合偏置量约 75
+    NewEditW := A_GuiWidth - 8
+    NewEditH := A_GuiHeight - 75
+    if (NewEditH < 50)
+        NewEditH := 50 ; 防止极端缩小导致报错
+
+    GuiControl, Move, PreviewEdit, w%NewEditW% h%NewEditH%
+
+    ; 【修改】：2. 动态计算按钮的 Y 坐标 (距离底部 34)
+    NewBtnY := A_GuiHeight - 34
+
+    ; 【修改】：3. 动态计算按钮的 X 坐标 (靠右对齐)
+    NewRightBtnX := A_GuiWidth - 104 ; 最右边按钮 (取消 / 关闭)
+    NewLeftBtnX  := A_GuiWidth - 208 ; 靠左边按钮 (确认执行)
+
+    ; 4. 执行坐标移动
+    GuiControl, Move, BtnPreviewConfirm, x%NewLeftBtnX% y%NewBtnY%
+    GuiControl, Move, BtnPreviewCancel, x%NewRightBtnX% y%NewBtnY%
+    GuiControl, Move, BtnPreviewClose, x%NewRightBtnX% y%NewBtnY%
+return
+
+; ==============================================================================
+
+ConfirmRunTest:
+    Gui, ParsePreview: Destroy
+    ExecuteAction("1", TestRun_Type, TestRun_Param, TestRun_DropData, TestRun_DropType)
+return
+
+CloseParsePreview:
+ParsePreviewGuiEscape:
+ParsePreviewGuiClose:
+    Gui, ParsePreview: Destroy
+return
+
+; ==============================================================================
+; 悬浮球内置占位符说明面板
+; ==============================================================================
+ShowPlaceholderHelp:
+    helpText =
+    (
+=== 文件专用占位符 (针对拖入文件路径) ===
+{$Dropped_file$}	 - 返回包含所有被拖入文件路径的原始多行文本（不循环）
+{$Dropped_file_loop$}	 - 循环处理每个文件。有几个文件，外层命令就拆分并执行几次
+{$Dropped_file_loop_dbl$}	 - 将斜杠替换为双斜杠（循环处理每个被拖入的文件路径）
+{$Dropped_file_loop_dbl_bs$}	 - 将斜杠替换为反斜杠（循环处理每个被拖入的文件路径）
+{$Dropped_file_loop_name$}	 - 只返回文件名（循环处理每个被拖入的文件路径）
+{$Dropped_file_loop_dir$}	 - 只返回文件所在目录（循环处理每个被拖入的文件路径）
+{$Dropped_file_loop_ext$}	 - 只返回文件后缀（循环处理每个被拖入的文件路径）
+{$Dropped_file_loop_nameNoExt$}	 - 只返回文件名不含后缀（循环处理每个被拖入的文件路径）
+{$Dropped_file_loop_drive$}	 - 只返回文件所在驱动器（循环处理每个被拖入的文件路径）
+{$Dropped_file_loop_dirname$}	 - 只返回文件所在目录的文件夹名称（循环处理每个被拖入的文件路径）
+
+{$Dropped_file_f_path$}	 - 文件完整路径（拖入多个文件时只获取第一行）
+{$Dropped_file_f_name$}	 - 文件名（拖入多个文件时只获取第一行）
+{$Dropped_file_f_dir$}	 - 文件所在目录（拖入多个文件时只获取第一行）
+{$Dropped_file_f_ext$}	 - 文件后缀（拖入多个文件时只获取第一行）
+{$Dropped_file_f_nameNoExt$}	 - 文件名不含后缀（拖入多个文件时只获取第一行）
+{$Dropped_file_f_drive$}	 - 文件所在驱动器（拖入多个文件时只获取第一行）
+{$Dropped_file_f_dirname$}	 - 文件所在目录的文件夹名称（拖入多个文件时只获取第一行）
+
+{$Dropped_filetofile$}	 - 将拖入的所有文件路径的原始多行文本整体落地保存到脚本目录下 Dropped 文件夹里的临时 .txt 文件中，并返回其文件路径
+{$Dropped_allfile$}	 - 将所有文件路径合并为单行，默认用空格分隔，且每个路径自带双引号防护
+{$Dropped_allfile|间隔词$}	 - 将所有文件路径合并为单行，并在路径之间插入自定义的间隔词
+
+=== 文本专用占位符 (针对拖入/剪贴板纯文本) ===
+{$Dropped_text$}	 - 原地返回用户拖入的原始多行纯文本内容（不循环、不拆分）
+{$Dropped_text_loop$}	 - 开启循环模式。将多行文本按行拆分，每行内容分别触发执行一次命令
+{$Dropped_texttofile$}	 - 将拖入的所有文本内容整体落地保存到脚本目录下 Dropped 文件夹里的一个临时 .txt 文件中，并返回其文件路径
+{$Dropped_alltext$}	 - 将多行纯文本合并为单行文本，默认行与行之间用空格进行分隔
+{$Dropped_alltext|间隔词$}	 - 将多行纯文本合并为单行，行与行之间使用自定义的间隔词进行连接
+
+=== 获取选中内容专用占位符(通过ctrl+c获取)===
+{$Selected$}	 - 原地返回选中的原始多行纯文本内容（不循环、不拆分）
+{$Selected_loop$}	 - 开启循环模式。将选中的内容按行拆分，每行内容分别触发执行一次命令
+
+{$Selected_loop_dbl$}	 - 将斜杠替换为双斜杠（如果每行内容是一个文件路径时）
+{$Selected_loop_dbl_bs$}	 - 将斜杠替换为反斜杠（如果每行内容是一个文件路径时）
+{$Selected_loop_name$}	 - 只返回文件名（如果每行内容是一个文件路径时）
+{$Selected_loop_dir$}	 - 只返回文件所在目录（如果每行内容是一个文件路径时）
+{$Selected_loop_ext$}	 - 只返回文件后缀（如果每行内容是一个文件路径时）
+{$Selected_loop_nameNoExt$}	 - 只返回文件名不含后缀（如果每行内容是一个文件路径时）
+{$Selected_loop_drive$}	 - 只返回文件所在驱动器（如果每行内容是一个文件路径时）
+{$Selected_loop_dirname$}	 - 只返回文件所在目录的文件夹名称（如果每行内容是一个文件路径时）
+
+{$Selected_f_path$}	 - 文件完整路径（选中的内容多行只获取第一行）
+{$Selected_f_name$}	 - 文件名（选中的内容多行只获取第一行）
+{$Selected_f_dir$}	 - 文件所在目录（选中的内容多行只获取第一行）
+{$Selected_f_ext$}	 - 文件后缀（选中的内容多行只获取第一行）
+{$Selected_f_nameNoExt$}	 - 文件名不含后缀（选中的内容多行只获取第一行）
+{$Selected_f_drive$}	 - 文件所在驱动器（选中的内容多行只获取第一行）
+{$Selected_f_dirname$}	 - 文件所在目录的文件夹名称（选中的内容多行只获取第一行）
+
+{$Selectedtofile$}	 - 将选中的内容整体落地保存到脚本目录下 Dropped 文件夹里的临时 .txt 文件中，并返回其文件路径
+{$Selected_all$}	 - 将选中的多行纯文本合并为单行文本，每行用双引号包裹，默认行与行之间用空格进行分隔
+{$Selected_all|间隔词$}	 - 将选中的多行纯文本合并为单行，每行用双引号包裹，行与行之间使用自定义的间隔词进行连接
+
+=== 核心全局变量占位符 ===
+{$AHK_Var|变量名$}	 - 动态获取并替换当前脚本中任何全局变量或 AHK 内置变量的值（例如当前年份、桌面路径等）
+
+{$SelectFolder$}	 - 弹出文件夹选择对话框，返回选中的路径
+{$ActiveWindow$}	 - 当前活动窗口标题
+{$ActiveProcess$}	 - 当前活动窗口进程名（如 chrome.exe）
+{$ActiveClass$}	 - 当前活动窗口的类名（如 Chrome_WidgetWin_1）
+{$Env:变量名$}	 - 读取系统环境变量（例如 {$Env:USERPROFILE$} 或 {$Env:PATH$}）
+{$MouseX$}	 - 鼠标当前屏幕坐标 X
+{$MouseY$}	 - 鼠标当前屏幕坐标 Y
+{$MouseColor$}	 - 鼠标位置像素的 RGB 颜色值（如 0xFFAA00）
+{$inputbox|默认值|这是标题|这是备注$}	 - 弹出一个输入框输入指定值，并返回输入内容
+
+=== 智能无缝占位符 (自动适配文件或文本) ===
+{$Dropped$}	 - 智能版基础位。文件模式下等同于原始多行路径，文本模式下等同于原始多行文本（不循环）
+{$Dropped_loop$}	 - 智能版循环位。文件模式下按文件数量循环，文本模式下按文本行数循环
+{$Dropped_all$}	 - 智能版全合并。文件模式下等同于合并路径串，文本模式下等同于合并多行纯文字（默认空格分隔）
+{$Dropped_all|间隔词$}	 - 智能版带词合并。自动合并多行数据，并在中间插入您自定义的间隔词
+{$Droppedtofile$}	 - 智能版内容落地。无论拖入的是文件还是纯文本，都将内容整体落地为当前存储目录下的一个临时 .txt 文件（不循环）
+    )
+
+    Gui, HelpGui: Destroy
+    ; 允许调整大小和最大化
+    Gui, HelpGui: +OwnerEventSettings +Resize +MaximizeBox
+    Gui, HelpGui: Color, 2B2B2B
+
+    ; 【优化】将边距从 12 缩小到 6，让编辑框极其贴近窗口边缘
+    Gui, HelpGui: Margin, 4, 4
+
+    Gui, HelpGui: Font, s10 cBlack w400, 微软雅黑
+    ; 【优化】去掉了标题文本和按钮，Edit 框直接从 x6 y6 开始，填满初始窗口
+    Gui, HelpGui: Add, Edit, x6 y6 w560 h720 ReadOnly vHelpEdit cWhite Multi VScroll HScroll, %helpText%
+
+    Gui, HelpGui: Show,, 占位符说明
+return
+
+; ==============================================================================
+; 监听说明窗口大小改变事件 (极致精简版)
+; ==============================================================================
+HelpGuiGuiSize:
+    if (A_EventInfo = 1) ; 最小化时不处理
+        return
+
+    ; 【优化】因为没有了标题和按钮，编辑框的宽高直接减去两边的边距（6 * 2 = 12）即可
+    NewHelpEditW := A_GuiWidth - 12
+    NewHelpEditH := A_GuiHeight - 12
+    if (NewHelpEditH < 50)
+        NewHelpEditH := 50
+
+    GuiControl, Move, HelpEdit, w%NewHelpEditW% h%NewHelpEditH%
+return
+
+; 依然保留标准的关闭行为（点击右上角红叉或按 Esc 键关闭窗口）
+HelpGuiGuiClose:
+HelpGuiGuiEscape:
+HelpGuiClose:
+    Gui, HelpGui: Destroy
+return
+
+; ==============================================================================
+; 监听窗口大小改变事件，实现内部控件自适应排版
+; ==============================================================================
+LargeEditorGuiSize:
+    if (A_EventInfo = 1) ; 窗口被最小化时不作处理
+        return
+
+    NewEditW := A_GuiWidth - 8
+    NewEditH := A_GuiHeight - 42
+    GuiControl, Move, LargeEditText, w%NewEditW% h%NewEditH%
+
+    NewBtnY := A_GuiHeight - 34
+
+    NewCancelX := A_GuiWidth - 104  ; 取消按钮：靠右侧对齐 (宽100 + 右留白4)
+    NewSaveX   := A_GuiWidth - 208  ; 保存按钮：紧贴取消按钮左侧
+
+    NewParseX  := NewSaveX - 44     ; 解析按钮：宽40 + 左侧间距4
+    NewRunX    := NewParseX - 44    ; 运行按钮：宽40 + 左侧间距4
+    NewHelpX   := 4
+
+    ; 4. 执行坐标移动
+    GuiControl, Move, BtnSave, x%NewSaveX% y%NewBtnY%
+    GuiControl, Move, BtnCancel, x%NewCancelX% y%NewBtnY%
+
+    GuiControl, Move, BtnLargeParse, x%NewParseX% y%NewBtnY%
+    GuiControl, Move, BtnLargeRun, x%NewRunX% y%NewBtnY%
+    GuiControl, Move, BtnLargeHelp, x%NewHelpX% y%NewBtnY%
+return
+; ==============================================================================
+
+SaveEventSettings:
+    GoSub, CoreSaveEventSettings ; 执行核心保存逻辑
+    ; 确认保存后执行关闭动作
+    Gui, EventSettings: Destroy
+return
+
+; ==============================================================================
+; --- 新增：配置管理功能逻辑 ---
+; ==============================================================================
+
+SaveUserConfig:
+    FormatTime, defaultName,, yyyyMMdd_HHmmss
+    InputBox, inputName, 保存配置, 请输入配置名称（不含扩展名）：, , 300, 150, , , , , %defaultName%
+    if ErrorLevel
+        return
+    inputName := Trim(inputName)
+    if (inputName = "")
+        return
+
+    if !InStr(FileExist(CfgMgr_UserConfigDir), "D")
+        FileCreateDir, %CfgMgr_UserConfigDir%
+
+    ; 💡 修复点：兜底防呆设计。如果函数被意外单独调用且文件不存在，强制生成，防止复制失败
+    if !FileExist(A_ScriptDir "\Settings.ini") {
+        Var_Set("1", "0", "意外删除", "基础配置", A_ScriptDir "\Settings.ini")
+    }
+    if (SaveSize = "1") {
+        Var_Set(BallSize, "50", "BallSize", "基础配置",A_ScriptDir "\Settings.ini")
+    }
+    if (SavePosition = "1") {
+        Gosub, 获取悬浮球坐标_调整到屏幕内
+        Var_Set(nowX,"","GUI_X", "基础配置",A_ScriptDir "\Settings.ini")
+        Var_Set(nowY,"","GUI_Y", "基础配置",A_ScriptDir "\Settings.ini")
+    }
+
+    FileCopy, %A_ScriptDir%\Settings.ini, %CfgMgr_UserConfigDir%\%inputName%.ini, 1
+
+    if (CfgMgr_EnableAutoBackup = "1")
+        BackupCurrentConfig()
+
+    ToolTip, 成功保存配置：%inputName%
+    SetTimer, RemoveToolTip, -1500
+return
+
+LoadUserConfig:
+    targetConfig := A_ThisMenuItem
+    MsgBox, 276, 警告, 是否切换到配置「%targetConfig%」？`n脚本将自动重启。
+    IfMsgBox, Yes
+    {
+        ; 核心防御：临时关闭退出时保存大小和位置，防止重启时将当前界面的旧数据复写到新配置中
+        SaveSize := 0
+        SavePosition := 0
+
+        FileCopy, %CfgMgr_UserConfigDir%\%targetConfig%.ini, %A_ScriptDir%\Settings.ini, 1
+        Reload
+    }
+return
+
+LoadBackupConfig:
+    ; 根据显示的日期菜单项，反向还原出备份文件名
+    targetName := A_ThisMenuItem
+    targetName := StrReplace(targetName, "-", "")
+    targetName := StrReplace(targetName, ":", "")
+    targetName := StrReplace(targetName, " ", "_")
+    targetFile := "Settings_" targetName ".ini"
+
+    MsgBox, 276, 警告, 是否恢复到备份文件「%A_ThisMenuItem%」？`n脚本将自动重启。
+    IfMsgBox, Yes
+    {
+        ; 核心防御同上
+        SaveSize := 0
+        SavePosition := 0
+
+        FileCopy, %CfgMgr_UserConfigDir%\backup\%targetFile%, %A_ScriptDir%\Settings.ini, 1
+        Reload
+    }
+return
+
+ClearAllBackups:
+    MsgBox, 292, 警告, 确定要删除所有备份配置吗？
+    IfMsgBox, Yes
+    {
+        FileDelete, %CfgMgr_UserConfigDir%\backup\Settings_*.ini
+        ToolTip, 已清空所有备份！
+        SetTimer, RemoveToolTip, -1500
+    }
+return
+
+OpenConfigDir:
+    if !InStr(FileExist(CfgMgr_UserConfigDir), "D")
+        FileCreateDir, %CfgMgr_UserConfigDir%
+    Run, "%CfgMgr_UserConfigDir%"
+return
+
+ToggleAutoBackup:
+    CfgMgr_EnableAutoBackup := (CfgMgr_EnableAutoBackup = "1" ? "0" : "1")
+    Var_Set(CfgMgr_EnableAutoBackup, "1", "EnableAutoBackup", "基础配置", A_ScriptDir "\Settings.ini")
+return
+
+BackupCurrentConfig() {
+    global CfgMgr_UserConfigDir, CfgMgr_MaxBackupCount, SaveSize, SavePosition, BallSize, nowX, nowY
+    bakDir := CfgMgr_UserConfigDir "\backup"
+
+    if !InStr(FileExist(bakDir), "D")
+        FileCreateDir, %bakDir%
+
+    ; 💡 修复点：兜底防呆设计。如果函数被意外单独调用且文件不存在，强制生成，防止复制失败
+    if !FileExist(A_ScriptDir "\Settings.ini") {
+        Var_Set("1", "0", "意外删除", "基础配置", A_ScriptDir "\Settings.ini")
+    }
+
+    if (SaveSize = "1") {
+        Var_Set(BallSize, "50", "BallSize", "基础配置",A_ScriptDir "\Settings.ini")
+    }
+    if (SavePosition = "1") {
+        Gosub, 获取悬浮球坐标_调整到屏幕内
+        Var_Set(nowX,"","GUI_X", "基础配置",A_ScriptDir "\Settings.ini")
+        Var_Set(nowY,"","GUI_Y", "基础配置",A_ScriptDir "\Settings.ini")
+    }
+
+    FormatTime, timeStr,, yyyyMMdd_HHmmss
+    targetFile := bakDir "\Settings_" timeStr ".ini"
+    FileCopy, %A_ScriptDir%\Settings.ini, %targetFile%, 1
+
+    ; 清理超过最大数量的旧文件
+    if (CfgMgr_MaxBackupCount <= 0)
+        return
+
+    FileList := ""
+    Loop, Files, %bakDir%\Settings_*.ini
+        FileList .= A_LoopFileTimeModified "`t" A_LoopFileFullPath "`n"
+
+    Sort, FileList, R ; 按时间戳倒序排列（最新的在前面）
+
+    Loop, Parse, FileList, `n, `r
+    {
+        if (A_LoopField = "")
+            continue
+        ; 如果当前序号超出了最大保留个数，则删除该文件
+        if (A_Index > CfgMgr_MaxBackupCount) {
+            delPath := SubStr(A_LoopField, InStr(A_LoopField, "`t") + 1)
+            FileDelete, %delPath%
+        }
+    }
+}
+
+ApplyEventSettings:
+    GoSub, CoreSaveEventSettings ; 仅执行核心保存逻辑，不关闭界面
+return
+
+CoreSaveEventSettings:
+    ; 关键：使用 NoHide 获取界面数据但不隐藏窗口
+    Gui, EventSettings: Submit, NoHide
+
+    Prefixes := ["LBtn", "MBtn", "WheelUp", "WheelDown", "DropFile", "DropText"]
+    Sections := ["左键单击事件", "中键单击事件", "滚轮向上事件", "滚轮向下事件", "拖放事件_文件", "拖放事件_文本"]
+
+    Loop, 6 {
+        pref := Prefixes[A_Index]
+        sect := Sections[A_Index]
+
+        ; 读取基础修饰键
+        valEnable := %pref%_EnableChecked
+        RegExMatch(%pref%_TypeChoice, "^\d+", valType)
+        valParam := %pref%_ParamEdit
+
+        ; 读取 Ctrl 修饰键
+        valEnableCtrl := %pref%_EnableCtrlChecked
+        RegExMatch(%pref%_TypeCtrlChoice, "^\d+", valTypeCtrl)
+        valParamCtrl := %pref%_ParamCtrlEdit
+
+        ; 读取 Alt 修饰键
+        valEnableAlt := %pref%_EnableAltChecked
+        RegExMatch(%pref%_TypeAltChoice, "^\d+", valTypeAlt)
+        valParamAlt := %pref%_ParamAltEdit
+
+        ; 读取 Shift 修饰键
+        valEnableShift := %pref%_EnableShiftChecked
+        RegExMatch(%pref%_TypeShiftChoice, "^\d+", valTypeShift)
+        valParamShift := %pref%_ParamShiftEdit
+
+        ; 写入 INI 文件
+        Var_Set(valEnable, "这是默认值", "启用", sect, A_ScriptDir "\Settings.ini")
+        Var_Set(valType, "这是默认值", "功能类型", sect, A_ScriptDir "\Settings.ini")
+        Var_Set(valParam, "这是默认值", "功能参数", sect, A_ScriptDir "\Settings.ini")
+
+        Var_Set(valEnableCtrl, "这是默认值", "启用_ctrl", sect, A_ScriptDir "\Settings.ini")
+        Var_Set(valTypeCtrl, "这是默认值", "功能类型_ctrl", sect, A_ScriptDir "\Settings.ini")
+        Var_Set(valParamCtrl, "这是默认值", "功能参数_ctrl", sect, A_ScriptDir "\Settings.ini")
+
+        Var_Set(valEnableAlt, "这是默认值", "启用_alt", sect, A_ScriptDir "\Settings.ini")
+        Var_Set(valTypeAlt, "这是默认值", "功能类型_alt", sect, A_ScriptDir "\Settings.ini")
+        Var_Set(valParamAlt, "这是默认值", "功能参数_alt", sect, A_ScriptDir "\Settings.ini")
+
+        Var_Set(valEnableShift, "这是默认值", "启用_shift", sect, A_ScriptDir "\Settings.ini")
+        Var_Set(valTypeShift, "这是默认值", "功能类型_shift", sect, A_ScriptDir "\Settings.ini")
+        Var_Set(valParamShift, "这是默认值", "功能参数_shift", sect, A_ScriptDir "\Settings.ini")
+
+        ; 热更新内存变量
+        %pref%_Enable := valEnable, %pref%_Type := valType, %pref%_Param := valParam
+        %pref%_Enable_ctrl := valEnableCtrl, %pref%_Type_ctrl := valTypeCtrl, %pref%_Param_ctrl := valParamCtrl
+        %pref%_Enable_alt := valEnableAlt, %pref%_Type_alt := valTypeAlt, %pref%_Param_alt := valParamAlt
+        %pref%_Enable_shift := valEnableShift, %pref%_Type_shift := valTypeShift, %pref%_Param_shift := valParamShift
+    }
+
+    ToolTip, 事件设置已保存！
+    SetTimer, RemoveToolTip, -1500
+return
+
+CancelEventSettings:
+EventSettingsGuiEscape:
+    Gui, EventSettings: Destroy
+return
+
+; --- 逻辑函数 ---
+GuiDrag:
+    PostMessage, 0xA1, 2,,, A
+return
+
+; 为窗口设置圆角区域
+SetWindowRgn(hwnd, w, h, r) {
+    ; 创建一个圆角矩形区域 (GDI API)
+    hRgn := DllCall("CreateRoundRectRgn", "Int", 0, "Int", 0, "Int", w, "Int", h, "Int", r, "Int", r)
+    ; 将区域应用到窗口
+    DllCall("SetWindowRgn", "Ptr", hwnd, "Ptr", hRgn, "Int", 1)
+}
+; --- API 绘图辅助函数 (不依赖外置简写函数) ---
+DrawRoundedBackground_API(hwnd, w, h, radius, color, borderColor) {
+    Ptr := A_PtrSize ? "UPtr" : "UInt"
+    hDC := DllCall("GetDC", Ptr, hwnd, Ptr)
+    mDC := DllCall("CreateCompatibleDC", Ptr, hDC, Ptr)
+    hBM := DllCall("CreateCompatibleBitmap", Ptr, hDC, "Int", w, "Int", h, Ptr)
+    oBM := DllCall("SelectObject", Ptr, mDC, Ptr, hBM, Ptr)
+
+    ; 启动 GDI+ 图形
+    G := Gdip_GraphicsFromHDC(mDC)
+    DllCall("gdiplus\GdipSetSmoothingMode", Ptr, G, "Int", 4)
+
+    ; 绘制圆角填充 (调用 Gdip 库函数，这些通常已在 lib\Gdip_All.ahk 中)
+    pBrush := Gdip_BrushCreateSolid(color)
+    Gdip_FillRoundedRectangle(G, pBrush, 0, 0, w, h, radius)
+    Gdip_DeleteBrush(pBrush)
+
+    ; 绘制圆角边框
+    pPen := Gdip_CreatePen(borderColor, 1)
+    Gdip_DrawRoundedRectangle(G, pPen, 0, 0, w-1, h-1, radius)
+    Gdip_DeletePen(pPen)
+
+    ; 将绘制好的位图贴到窗口
+    DllCall("BitBlt", Ptr, hDC, "Int", 0, "Int", 0, "Int", w, "Int", h, Ptr, mDC, "Int", 0, "Int", 0, "UInt", 0x00CC0020)
+
+    ; 释放资源 [cite: 107]
+    Gdip_DeleteGraphics(G)
+    DllCall("SelectObject", Ptr, mDC, Ptr, oBM)
+    DllCall("DeleteObject", Ptr, hBM)
+    DllCall("DeleteDC", Ptr, mDC)
+    DllCall("ReleaseDC", Ptr, hwnd, Ptr, hDC)
+}
+
+; ==============================================================================
+; 新增：GIF 帧渲染定时器标签
+; ==============================================================================
+UpdateGifFrame:
+    if (!IsGif || !pBitmap)
+        return
+
+    ; 优化性能：如果球被隐藏（贴边或全屏），则暂停绘制，节约 CPU
+    if (IsHidden || IsFullScreenHidden) {
+        SetTimer, UpdateGifFrame, Off
+        return
+    }
+
+    ; 切换到下一活动帧
+    DllCall("gdiplus\GdipImageSelectActiveFrame", "Ptr", pBitmap, "Ptr", &GifDimensionID, "Int", GifCurrentFrame)
+
+    ; 获取当前窗口位置并重绘当前帧
+    WinGetPos, curX, curY,,, ahk_id %hBall%
+    UpdateBallDisplay(hBall, pBitmap, curX, curY, BallSize, CurrentAlpha)
+
+    ; 读取当前帧延迟，并设置单次定时器触发下一帧 (使用负数表示 One-Shot 定时器)
+    currentDelay := GifDelays[GifCurrentFrame + 1]
+    SetTimer, UpdateGifFrame, % "-" currentDelay
+
+    ; 循环递增索引
+    GifCurrentFrame++
+    if (GifCurrentFrame >= GifFrameCount)
+        GifCurrentFrame := 0
+return
+
+; ==============================================================================
+; 新增：时间模式动态刷新与模式切换逻辑
+; ==============================================================================
+UpdateTimeLoop:
+    ; 仅在时间模式下，且悬浮球未被隐藏时，进行每秒重绘
+    if (DisplayMode = "Time" && !IsHidden && !IsFullScreenHidden && !IsEditMode) {
+        WinGetPos, curX, curY,,, ahk_id %hBall%
+        UpdateBallDisplay(hBall, pBitmap, curX, curY, BallSize, CurrentAlpha)
+    }
+return
+
+ToggleDisplayMode:
+    ; 切换模式并写入 INI 配置文件
+    DisplayMode := (DisplayMode = "Image") ? "Time" : "Image"
+    Var_Set(DisplayMode, "Image", "DisplayMode", "基础配置", A_ScriptDir "\Settings.ini")
+
+    if (DisplayMode = "Time") {
+        ; 切换到时间模式：清空留边比例，停止 GIF 渲染
+        ImgPadL_Ratio := 0, ImgPadR_Ratio := 0, ImgPadT_Ratio := 0, ImgPadB_Ratio := 0
+        SetTimer, UpdateGifFrame, Off
+    } else {
+        ; 切换回图片模式：重新计算留边，若是 GIF 则唤醒动画
+        UpdateBitmapPadding()
+        if (IsGif)
+            GoSub, UpdateGifFrame
+    }
+
+    ; 立即刷新显示，并触发吸附校准防越界
+    WinGetPos, curX, curY,,, ahk_id %hBall%
+    UpdateBallDisplay(hBall, pBitmap, curX, curY, BallSize, CurrentAlpha)
+    GoSub, HandleSnapping ; <--- 【新增】重新计算位置防越界
+return
+
+; ==============================================================================
+; 全局基础设置面板 (可视化 GUI)
+; ==============================================================================
+ShowMainSettingsGUI:
+    global hMainGui
+
+    if WinExist("ahk_id " hMainGui) {
+        Gui, MainSettings: show
+        return
+    }
+
+    ; 创建暗色无边框窗口
+    Gui, MainSettings: New, +HwndhMainGui -Caption
+    Gui, MainSettings: Color, 2B2B2B
+    Gui, MainSettings: Margin, 15, 15
+
+    W := 620, H := 460
+    SetWindowRgn(hMainGui, W, H, 20)
+    DrawRoundedBackground_API(hMainGui, W, H, 15, 0xFF2B2B2B, 0xFF3D3D3D)
+
+    ; 标题
+    Gui, MainSettings: Font, s12 cWhite w700, 微软雅黑
+    Gui, MainSettings: Add, Text, x20 y10 w580 h30 BackgroundTrans gGuiDrag, ⚙️ 全局基础设置
+
+    ; 选项卡定义 (新增第6个Tab用于管理备份)
+    Gui, MainSettings: Font, s9 cAAAAAA w400, 微软雅黑
+    Gui, MainSettings: Add, Tab3, x15 y45 w590 h360 cWhite, 基础与外观|行为与隐藏|透明度控制|时间模式|关闭与高阶|配置管理与备份
+
+; --------------------------------------------------
+    ; Tab 1: 基础与外观
+    ; --------------------------------------------------
+    Gui, MainSettings: Tab, 1
+    
+    ; 【新增：将两项配置放在第一行】
+    Gui, MainSettings: Add, Checkbox, x30 y85 w150 vGUI_AdminLaunch Checked%AdminLaunch%, 以管理员权限运行
+    Gui, MainSettings: Add, Checkbox, x200 y85 w150 vGUI_AutoRun Checked%AutoRun%, 开机自动启动
+
+    ; 【下方原有选项整体下移 40 像素】
+    Gui, MainSettings: Add, Text, x30 y125 cWhite w100, 悬浮球默认大小:
+    Gui, MainSettings: Add, Edit, x140 y120 w80 h25 vGUI_BallSize cBlack, %BallSize%
+
+    Gui, MainSettings: Add, Text, x30 y165 cWhite w100, 最小限制大小:
+    Gui, MainSettings: Add, Edit, x140 y160 w80 h25 vGUI_minBallSize cBlack, %minBallSize%
+    Gui, MainSettings: Add, Text, x250 y165 cWhite w100, 最大限制大小:
+    Gui, MainSettings: Add, Edit, x360 y160 w80 h25 vGUI_maxBallSize cBlack, %maxBallSize%
+
+    Gui, MainSettings: Add, Text, x30 y205 cWhite w100, 滚轮缩放增量:
+    Gui, MainSettings: Add, Edit, x140 y200 w80 h25 vGUI_BallSizeIncrement cBlack, %BallSizeIncrement%
+    Gui, MainSettings: Add, Checkbox, x250 y205 w150 vGUI_EnableWheelResize Checked%EnableWheelResize%, 允许滚轮调节大小
+
+    Gui, MainSettings: Add, Text, x30 y245 cWhite w100, 全局显示隐藏热键:
+    Gui, MainSettings: Add, Edit, x140 y240 w80 h25 vGUI_ToggleHotkey cBlack, %ToggleHotkey%
+    Gui, MainSettings: Add, Checkbox, x250 y245 w150 vGUI_EnableHotkey Checked%EnableHotkey%, 启用全局热键
+
+    Gui, MainSettings: Add, Checkbox, x30 y285 w150 vGUI_ShowTrayIcon Checked%ShowTrayIcon%, 显示系统托盘图标
+
+    ; 新增 X/Y 坐标设置
+    Gui, MainSettings: Add, Text, x200 y285 cWhite w60, X 坐标:
+    Gui, MainSettings: Add, Edit, x260 y280 w60 h25 vGUI_X cBlack, %GUI_X%
+    Gui, MainSettings: Add, Text, x340 y285 cWhite w60, Y 坐标:
+    Gui, MainSettings: Add, Edit, x400 y280 w60 h25 vGUI_Y cBlack, %GUI_Y%
+
+    ; --------------------------------------------------
+    ; Tab 2: 行为与隐藏
+    ; --------------------------------------------------
+    Gui, MainSettings: Tab, 2
+    ; 【修复对齐】加宽了 Checkbox 的 w 宽度防止截断，重新排列 x 坐标
+    Gui, MainSettings: Add, Checkbox, x30 y85 w120 vGUI_IsAlwaysOnTop Checked%IsAlwaysOnTop%, 强制置顶显示
+    Gui, MainSettings: Add, Checkbox, x160 y85 w135 vGUI_IsLocked Checked%IsLocked%, 固定位置禁止拖拽
+    Gui, MainSettings: Add, Checkbox, x305 y85 w135 vGUI_HideInFullScreen Checked%HideInFullScreen%, 全屏时自动隐藏
+
+    Gui, MainSettings: Add, Checkbox, x30 y125 w120 vGUI_SavePosition Checked%SavePosition%, 退出时保存位置
+    Gui, MainSettings: Add, Checkbox, x160 y125 w135 vGUI_SaveSize Checked%SaveSize%, 退出时保存大小
+    Gui, MainSettings: Add, Checkbox, x305 y125 w135 vGUI_EnableEdgeHide Checked%EnableEdgeHide%, 开启贴边自动隐藏
+
+    Gui, MainSettings: Add, Text, x30 y175 cWhite w100, 边缘吸附感应距离:
+    Gui, MainSettings: Add, Edit, x150 y170 w80 h25 vGUI_SnapRange cBlack, %SnapRange%
+    Gui, MainSettings: Add, Text, x30 y215 cWhite w100, 贴边隐藏露出宽度:
+    Gui, MainSettings: Add, Edit, x150 y210 w80 h25 vGUI_HideMargin cBlack, %HideMargin%
+    Gui, MainSettings: Add, Text, x270 y215 cWhite w120, 贴边后多久开始隐藏:
+    Gui, MainSettings: Add, Edit, x400 y210 w80 h25 vGUI_HideDelay cBlack, %HideDelay%
+
+    ; --------------------------------------------------
+    ; Tab 3: 透明度控制
+    ; --------------------------------------------------
+    Gui, MainSettings: Tab, 3
+    Gui, MainSettings: Add, Checkbox, x30 y85 w150 vGUI_EnableDynamicOpacity Checked%EnableDynamicOpacity%, 开启动态透明度调整
+
+    Gui, MainSettings: Add, Text, x30 y125 cWhite w100, 鼠标离开基础透明:
+    Gui, MainSettings: Add, Edit, x150 y120 w80 h25 vGUI_MinOpacity cBlack, %MinOpacity%
+    Gui, MainSettings: Add, Text, x270 y125 cWhite w100, 鼠标进入最高透明:
+    Gui, MainSettings: Add, Edit, x380 y120 w80 h25 vGUI_MaxOpacity cBlack, %MaxOpacity%
+
+    Gui, MainSettings: Add, Text, x30 y165 cWhite w100, 贴边隐藏后透明度:
+    Gui, MainSettings: Add, Edit, x150 y160 w80 h25 vGUI_hideOpacity cBlack, %hideOpacity%
+
+    Gui, MainSettings: Add, Text, x30 y205 cWhite w120, 鼠标离开后渐变延迟:
+    Gui, MainSettings: Add, Edit, x150 y200 w80 h25 vGUI_MouseLeaveDelay cBlack, %MouseLeaveDelay%
+    Gui, MainSettings: Add, Text, x270 y205 cWhite w100, 渐变步长(快慢):
+    Gui, MainSettings: Add, Edit, x380 y200 w80 h25 vGUI_FadeStep cBlack, %FadeStep%
+
+    ; --------------------------------------------------
+    ; Tab 4: 时间模式 (新增API拾色器和字体选择)
+    ; --------------------------------------------------
+    Gui, MainSettings: Tab, 4
+    Gui, MainSettings: Add, Text, x30 y85 cWhite w70, 时间格式:
+    Gui, MainSettings: Add, Edit, x100 y80 w160 h25 vGUI_TimeFormat cBlack, %TimeFormat%
+
+    Gui, MainSettings: Add, Text, x280 y85 cWhite w70, 字体名称:
+    Gui, MainSettings: Add, Edit, x350 y80 w100 h25 vGUI_TimeFont cBlack, %TimeFont%
+    Gui, MainSettings: Add, Button, x455 y79 w30 h27 gPickFont, 🔠
+
+    Gui, MainSettings: Add, Text, x30 y125 cWhite w70, 字体颜色:
+    Gui, MainSettings: Add, Edit, x100 y120 w80 h25 vGUI_TimeColor cBlack, %TimeColor%
+    Gui, MainSettings: Add, Button, x185 y119 w30 h27 gPickTimeColor, 🎨
+
+    Gui, MainSettings: Add, Text, x240 y125 cWhite w70, 字体大小比:
+    Gui, MainSettings: Add, Edit, x310 y120 w50 h25 vGUI_TimeFontRatio cBlack, %TimeFontRatio%
+    Gui, MainSettings: Add, Text, x380 y125 cWhite w60, Y轴微调:
+    Gui, MainSettings: Add, Edit, x440 y120 w50 h25 vGUI_TimeOffsetY cBlack, %TimeOffsetY%
+
+    Gui, MainSettings: Add, Checkbox, x30 y165 w100 vGUI_TimeFontBold Checked%TimeFontBold%, 文字加粗显示
+    Gui, MainSettings: Add, Checkbox, x150 y165 w120 vGUI_EnableTimeBg Checked%EnableTimeBg%, 显示背景包裹框
+
+    Gui, MainSettings: Add, Text, x30 y205 cWhite w70, 背景颜色:
+    Gui, MainSettings: Add, Edit, x100 y200 w80 h25 vGUI_TimeBgColor cBlack, %TimeBgColor%
+    Gui, MainSettings: Add, Button, x185 y199 w30 h27 gPickBgColor, 🎨
+
+    Gui, MainSettings: Add, Text, x240 y205 cWhite w70, 圆角比例:
+    Gui, MainSettings: Add, Edit, x310 y200 w50 h25 vGUI_TimeCornerRatio cBlack, %TimeCornerRatio%
+
+    Gui, MainSettings: Add, Text, x30 y245 cWhite w70, X轴留白:
+    Gui, MainSettings: Add, Edit, x100 y240 w50 h25 vGUI_TimePaddingX cBlack, %TimePaddingX%
+    Gui, MainSettings: Add, Text, x170 y245 cWhite w70, Y轴留白:
+    Gui, MainSettings: Add, Edit, x240 y240 w50 h25 vGUI_TimePaddingY cBlack, %TimePaddingY%
+
+    ; --------------------------------------------------
+    ; Tab 5: 关闭按钮与高阶设定
+    ; --------------------------------------------------
+    Gui, MainSettings: Tab, 5
+    Gui, MainSettings: Add, Checkbox, x30 y85 w120 vGUI_ShowCloseButton Checked%ShowCloseButton%, 显示关闭按钮
+
+    CloseActionStr := (CloseBtnAction="1" ? "退出程序|隐藏悬浮球||" : "退出程序||隐藏悬浮球")
+    Gui, MainSettings: Add, Text, x170 y85 cWhite w80, 按钮左键动作:
+    Gui, MainSettings: Add, DropDownList, x250 y80 w120 vGUI_CloseBtnActionChoice, %CloseActionStr%
+
+    Gui, MainSettings: Add, Text, x30 y125 cWhite w90, 关闭按钮 X偏移:
+    Gui, MainSettings: Add, Edit, x120 y120 w50 h25 vGUI_CloseBtn_X cBlack, %CloseBtn_X%
+    Gui, MainSettings: Add, Text, x190 y125 cWhite w90, 关闭按钮 Y偏移:
+    Gui, MainSettings: Add, Edit, x280 y120 w50 h25 vGUI_CloseBtn_Y cBlack, %CloseBtn_Y%
+    Gui, MainSettings: Add, Text, x350 y125 cWhite w90, 按钮消失延迟:
+    Gui, MainSettings: Add, Edit, x440 y120 w50 h25 vGUI_CloseBtn_HideTime cBlack, %CloseBtn_HideTime%
+
+    Gui, MainSettings: Add, Text, x30 y165 cWhite w90, 关闭按钮 大小:
+    Gui, MainSettings: Add, Edit, x120 y160 w50 h25 vGUI_CloseBtn_Size cBlack, %CloseBtn_Size%
+    Gui, MainSettings: Add, Text, x190 y165 cWhite w90, 叉号线条粗细:
+    Gui, MainSettings: Add, Edit, x280 y160 w50 h25 vGUI_CloseBtn_Thickness cBlack, %CloseBtn_Thickness%
+    Gui, MainSettings: Add, Text, x350 y165 cWhite w90, 叉号视觉边距:
+    Gui, MainSettings: Add, Edit, x440 y160 w50 h25 vGUI_CloseBtn_VisualMargin cBlack, %CloseBtn_VisualMargin%
+
+    ; --------------------------------------------------
+    ; Tab 6: 配置管理与备份 (补充遗漏的设置项)
+    ; --------------------------------------------------
+    Gui, MainSettings: Tab, 6
+    Gui, MainSettings: Add, Text, x30 y85 c00CCFF w500, --- 占位符与内容获取设定 ---
+
+    Gui, MainSettings: Add, Text, x30 y120 cWhite w130, 获取选中内容快捷键:
+    Gui, MainSettings: Add, Edit, x165 y115 w80 h25 vGUI_SelectedCopyKey cBlack, %SelectedCopyKey%
+
+    Gui, MainSettings: Add, Text, x270 y120 cWhite w130, 复制获取等待秒数:
+    Gui, MainSettings: Add, Edit, x390 y115 w50 h25 vGUI_SelectedWaitTime cBlack, %SelectedWaitTime%
+
+    Gui, MainSettings: Add, Text, x30 y160 cWhite w130, 最多保留落地文件数:
+    Gui, MainSettings: Add, Edit, x165 y155 w80 h25 vGUI_MaxTempFiles cBlack, %MaxTempFiles%
+
+    Gui, MainSettings: Add, Text, x30 y205 c00CCFF w500, --- 配置备份与管理 ---
+    Gui, MainSettings: Add, Text, x30 y240 cWhite w100, 配置文件目录:
+    Gui, MainSettings: Add, Edit, x130 y235 w320 h25 vGUI_CfgMgr_UserConfigDir cBlack, %CfgMgr_UserConfigDir%
+    Gui, MainSettings: Add, Button, x455 y234 w40 h27 gPickConfigDir, 📂
+
+    Gui, MainSettings: Add, Checkbox, x30 y285 w120 vGUI_CfgMgr_EnableAutoBackup Checked%CfgMgr_EnableAutoBackup%, 开启自动备份
+    Gui, MainSettings: Add, Text, x160 y285 cWhite w120, 最大保留备份数量:
+    Gui, MainSettings: Add, Edit, x280 y280 w60 h25 vGUI_CfgMgr_MaxBackupCount cBlack, %CfgMgr_MaxBackupCount%
+
+; --------------------------------------------------
+    ; 底部按钮区域
+    ; --------------------------------------------------
+    Gui, MainSettings: Tab
+    Gui, MainSettings: Add, Button, x300 y415 w110 h30 Default gSaveMainSettings, 保存并重启脚本
+    Gui, MainSettings: Add, Button, x420 y415 w80 h30 gApplyMainSettings, 应用
+    Gui, MainSettings: Add, Button, x510 y415 w80 h30 gCancelMainSettings, 取消
+
+    Gui, MainSettings: Show, w%W% h%H%, 悬浮球全局设置
+return
+
+; ==================================================
+; 辅助功能：目录、字体、颜色 原生系统选择器
+; ==================================================
+PickConfigDir:
+    Gui, MainSettings: +OwnDialogs
+    GuiControlGet, curDir,, GUI_CfgMgr_UserConfigDir
+
+    ; 换用 FileSelectFile，让用户选择目标目录下的任意 .ini 文件
+    FileSelectFile, selectedFile, 3, %curDir%, 请选择目标文件夹下的任意一个配置 (.ini) 文件, INI 文件 (*.ini)
+
+    if (selectedFile != "") {
+        ; 利用 SplitPath 自动剥离文件名，只保留纯粹的文件夹路径
+        SplitPath, selectedFile, , outDir
+        GuiControl,, GUI_CfgMgr_UserConfigDir, %outDir%
+    }
+return
+
+PickFont:
+    Gui, MainSettings: +OwnDialogs
+    VarSetCapacity(LOGFONT, 92, 0)
+
+    ; 动态计算 CHOOSEFONT 结构体大小和偏移，完美兼容 32位 / 64位 AHK
+    is64 := (A_PtrSize = 8)
+    structSize := is64 ? 104 : 60
+    VarSetCapacity(CHOOSEFONT, structSize, 0)
+
+    NumPut(structSize, CHOOSEFONT, 0, "UInt")                ; lStructSize
+    NumPut(hMainGui,   CHOOSEFONT, is64 ? 8 : 4, "UPtr")     ; hwndOwner
+    NumPut(&LOGFONT,   CHOOSEFONT, is64 ? 24 : 12, "UPtr")   ; lpLogFont
+    NumPut(0x02000141, CHOOSEFONT, is64 ? 36 : 20, "UInt")   ; Flags (CF_SCREENFONTS | CF_EFFECTS | CF_INITTOLOGFONTSTRUCT)
+
+    if DllCall("comdlg32\ChooseFont", "UPtr", &CHOOSEFONT) {
+        ; LOGFONT 结构体中，字体名称 lfFaceName 固定从第 28 字节开始
+        FontName := StrGet(&LOGFONT + 28, 32)
+        GuiControl,, GUI_TimeFont, %FontName%
+    }
+return
+
+PickTimeColor:
+    Gosub, PickColorDialog
+    if (PickedColor != "") {
+        GuiControlGet, oldC,, GUI_TimeColor
+        ; 保留原设定的透明度(前两位Alpha)，替换RGB部分
+        newC := SubStr(oldC, 1, 2) . PickedColor
+        GuiControl,, GUI_TimeColor, %newC%
+    }
+return
+
+PickBgColor:
+    Gosub, PickColorDialog
+    if (PickedColor != "") {
+        GuiControlGet, oldC,, GUI_TimeBgColor
+        ; 保留原设定的透明度(前两位Alpha)，替换RGB部分
+        newC := SubStr(oldC, 1, 2) . PickedColor
+        GuiControl,, GUI_TimeBgColor, %newC%
+    }
+return
+
+PickColorDialog:
+    Gui, MainSettings: +OwnDialogs
+    VarSetCapacity(CHOOSECOLOR, 9 * A_PtrSize, 0)
+    VarSetCapacity(CUSTOMCOLORS, 16 * 4, 0)
+    NumPut(9 * A_PtrSize, CHOOSECOLOR, 0, "UInt")
+    NumPut(hMainGui, CHOOSECOLOR, A_PtrSize, "UPtr")
+    NumPut(0, CHOOSECOLOR, 3 * A_PtrSize, "UInt")
+    NumPut(3, CHOOSECOLOR, 5 * A_PtrSize, "UInt") ; CC_RGBINIT | CC_FULLOPEN
+    NumPut(&CUSTOMCOLORS, CHOOSECOLOR, 4 * A_PtrSize, "UPtr")
+    PickedColor := ""
+    if DllCall("comdlg32\ChooseColor", "UPtr", &CHOOSECOLOR) {
+        Color := NumGet(CHOOSECOLOR, 3 * A_PtrSize, "UInt")
+        ; 转换系统返回的 BGR 格式为标准的 RGB 16进制格式
+        PickedColor := Format("{:06X}", (Color & 0xFF) << 16 | (Color & 0xFF00) | (Color >> 16))
+    }
+return
+
+; ==================================================
+; 保存与应用逻辑
+; ==================================================
+ApplyMainSettings:
+    GoSub, CoreSaveMainSettings
+    ToolTip, 全局设置已应用！
+    SetTimer, RemoveToolTip, -1500
+return
+
+SaveMainSettings:
+    GoSub, CoreSaveMainSettings
+    ToolTip, 全局设置已保存，正在重启脚本生效...
+    Sleep, 800
+    Reload
+return
+
+CoreSaveMainSettings:
+    Gui, MainSettings: Submit, NoHide
+
+    ; 1. 复选框状态转换 (获取界面上的 1/0)
+    v_AdminLaunch := GUI_AdminLaunch ? "1" : "0"    ; 【新增】
+    v_AutoRun := GUI_AutoRun ? "1" : "0"            ; 【新增】
+    v_ShowTrayIcon := GUI_ShowTrayIcon ? "1" : "0"
+    v_EnableWheelResize := GUI_EnableWheelResize ? "1" : "0"
+    v_EnableHotkey := GUI_EnableHotkey ? "1" : "0"
+    v_IsAlwaysOnTop := GUI_IsAlwaysOnTop ? "1" : "0"
+    v_IsLocked := GUI_IsLocked ? "1" : "0"
+    v_HideInFullScreen := GUI_HideInFullScreen ? "1" : "0"
+    v_SavePosition := GUI_SavePosition ? "1" : "0"
+    v_SaveSize := GUI_SaveSize ? "1" : "0"
+    v_EnableEdgeHide := GUI_EnableEdgeHide ? "1" : "0"
+    v_EnableDynamicOpacity := GUI_EnableDynamicOpacity ? "1" : "0"
+    v_TimeFontBold := GUI_TimeFontBold ? "1" : "0"
+    v_EnableTimeBg := GUI_EnableTimeBg ? "1" : "0"
+    v_ShowCloseButton := GUI_ShowCloseButton ? "1" : "0"
+    v_CfgMgr_EnableAutoBackup := GUI_CfgMgr_EnableAutoBackup ? "1" : "0"
+
+    ; 2. 下拉框处理
+    v_CloseBtnAction := (GUI_CloseBtnActionChoice = "退出程序") ? "0" : "1"
+
+    ; 3. 处理特殊格式
+    v_TimeFormat := StrReplace(GUI_TimeFormat, "`n", "\n")
+
+    iniPath := A_ScriptDir "\Settings.ini"
+    section := "基础配置"
+
+    ; --- 写入基础配置 (INI 文件) ---
+    Var_Set(v_AdminLaunch, "0", "AdminLaunch", section, iniPath) ; 【新增】
+    Var_Set(v_AutoRun, "0", "AutoRun", section, iniPath)         ; 【新增】
+    Var_Set(GUI_BallSize, "50", "BallSize", section, iniPath)
+    Var_Set(GUI_minBallSize, "20", "minBallSize", section, iniPath)
+    Var_Set(GUI_maxBallSize, "300", "maxBallSize", section, iniPath)
+    Var_Set(GUI_BallSizeIncrement, "5", "BallSizeIncrement", section, iniPath)
+    Var_Set(GUI_ToggleHotkey, "#p", "ToggleHotkey", section, iniPath)
+    Var_Set(v_ShowTrayIcon, "1", "ShowTrayIcon", section, iniPath)
+    Var_Set(v_EnableWheelResize, "1", "EnableWheelResize", section, iniPath)
+    Var_Set(v_EnableHotkey, "1", "EnableHotkey", section, iniPath)
+
+    Var_Set(GUI_X, "", "GUI_X", section, iniPath)
+    Var_Set(GUI_Y, "", "GUI_Y", section, iniPath)
+
+    Var_Set(v_IsAlwaysOnTop, "1", "IsAlwaysOnTop", section, iniPath)
+    Var_Set(v_IsLocked, "0", "IsLocked", section, iniPath)
+    Var_Set(v_HideInFullScreen, "1", "HideInFullScreen", section, iniPath)
+    Var_Set(v_SavePosition, "1", "SavePosition", section, iniPath)
+    Var_Set(v_SaveSize, "1", "SaveSize", section, iniPath)
+    Var_Set(v_EnableEdgeHide, "1", "EnableEdgeHide", section, iniPath)
+    Var_Set(GUI_SnapRange, "5", "SnapRange", section, iniPath)
+    Var_Set(GUI_HideMargin, "10", "HideMargin", section, iniPath)
+    Var_Set(GUI_HideDelay, "800", "HideDelay", section, iniPath)
+
+    Var_Set(v_EnableDynamicOpacity, "1", "EnableDynamicOpacity", section, iniPath)
+    Var_Set(GUI_MinOpacity, "120", "MinOpacity", section, iniPath)
+    Var_Set(GUI_MaxOpacity, "255", "MaxOpacity", section, iniPath)
+    Var_Set(GUI_hideOpacity, "150", "hideOpacity", section, iniPath)
+    Var_Set(GUI_MouseLeaveDelay, "1000", "MouseLeaveDelay", section, iniPath)
+    Var_Set(GUI_FadeStep, "15", "FadeStep", section, iniPath)
+
+    Var_Set(v_TimeFormat, "HH:mm:ss", "TimeFormat", section, iniPath)
+    Var_Set(GUI_TimeFont, "LESLIE", "TimeFont", section, iniPath)
+    Var_Set(GUI_TimeColor, "FFFFFFFF", "TimeColor", section, iniPath)
+    Var_Set(GUI_TimeFontRatio, "0.4", "TimeFontRatio", section, iniPath)
+    Var_Set(GUI_TimeOffsetY, "0", "TimeOffsetY", section, iniPath)
+    Var_Set(v_TimeFontBold, "1", "TimeFontBold", section, iniPath)
+    Var_Set(v_EnableTimeBg, "1", "EnableTimeBg", section, iniPath)
+    Var_Set(GUI_TimeBgColor, "66000000", "TimeBgColor", section, iniPath)
+    Var_Set(GUI_TimeCornerRatio, "0.2", "TimeCornerRatio", section, iniPath)
+    Var_Set(GUI_TimePaddingX, "5", "TimePaddingX", section, iniPath)
+    Var_Set(GUI_TimePaddingY, "5", "TimePaddingY", section, iniPath)
+
+    Var_Set(v_ShowCloseButton, "1", "ShowCloseButton", section, iniPath)
+    Var_Set(v_CloseBtnAction, "0", "CloseBtnAction", section, iniPath)
+    Var_Set(GUI_CloseBtn_X, "18", "CloseBtn_X", section, iniPath)
+    Var_Set(GUI_CloseBtn_Y, "14", "CloseBtn_Y", section, iniPath)
+    Var_Set(GUI_CloseBtn_HideTime, "400", "CloseBtn_HideTime", section, iniPath)
+    Var_Set(GUI_CloseBtn_Size, "20", "CloseBtn_Size", section, iniPath)
+    Var_Set(GUI_CloseBtn_Thickness, "3", "CloseBtn_Thickness", section, iniPath)
+    Var_Set(GUI_CloseBtn_VisualMargin, "5", "CloseBtn_VisualMargin", section, iniPath)
+
+    Var_Set(GUI_SelectedCopyKey, "^c", "SelectedCopyKey", section, iniPath)
+    Var_Set(GUI_SelectedWaitTime, "0.15", "SelectedWaitTime", section, iniPath)
+    Var_Set(GUI_MaxTempFiles, "10", "MaxTempFiles", section, iniPath)
+
+    Var_Set(GUI_CfgMgr_UserConfigDir, A_ScriptDir "\UserConfig", "UserConfigDir", "基础配置", iniPath)
+    Var_Set(v_CfgMgr_EnableAutoBackup, "1", "EnableAutoBackup", "基础配置", iniPath)
+    Var_Set(GUI_CfgMgr_MaxBackupCount, "10", "MaxBackupCount", "基础配置", iniPath)
+
+    ; ==============================================================================
+    ; 【核心新增】：将所有修改同步到内存全局变量，并即时重绘，使配置立即生效
+    ; ==============================================================================
+    global ToggleHotkey, EnableHotkey, ShowTrayIcon, BallSize, minBallSize, maxBallSize, BallSizeIncrement, EnableWheelResize
+    global AdminLaunch, AutoRun ; 【新增全局声明】
+    global IsAlwaysOnTop, IsLocked, HideInFullScreen, SavePosition, SaveSize, EnableEdgeHide, SnapRange, HideMargin, HideDelay
+    global EnableDynamicOpacity, MinOpacity, MaxOpacity, hideOpacity, MouseLeaveDelay, FadeStep, CurrentAlpha
+    global TimeFormat, TimeFont, TimeColor, TimeFontRatio, TimeOffsetY, TimeFontBold, EnableTimeBg, TimeBgColor, TimeCornerRatio, TimePaddingX, TimePaddingY
+    global ShowCloseButton, CloseBtnAction, CloseBtn_X, CloseBtn_Y, CloseBtn_HideTime, CloseBtn_Size, CloseBtn_Thickness, CloseBtn_VisualMargin
+    global SelectedCopyKey, SelectedWaitTime, MaxTempFiles, CfgMgr_UserConfigDir, CfgMgr_EnableAutoBackup, CfgMgr_MaxBackupCount
+
+    ; 1. 动态刷新快捷键状态
+    if (ToggleHotkey != GUI_ToggleHotkey && ToggleHotkey != "")
+        Hotkey, %ToggleHotkey%, Off, UseErrorLevel
+    ToggleHotkey := GUI_ToggleHotkey
+    EnableHotkey := v_EnableHotkey
+    if (ToggleHotkey != "") {
+        if (EnableHotkey = "1")
+            Hotkey, %ToggleHotkey%, ToggleBallVisibility, On UseErrorLevel
+        else
+            Hotkey, %ToggleHotkey%, Off, UseErrorLevel
+    }
+
+    ; 2. 托盘图标状态
+    ShowTrayIcon := v_ShowTrayIcon
+    if (ShowTrayIcon = "1")
+        Menu, Tray, Icon
+    else
+        Menu, Tray, NoIcon
+
+    ; 3. 同步全部内存变量
+    AdminLaunch := v_AdminLaunch            ; 【新增】
+    AutoRun := v_AutoRun                    ; 【新增】
+    Label_AutoRun(AutoRun)                  ; 【新增：立即触发开机自启逻辑】
+    BallSize := GUI_BallSize, minBallSize := GUI_minBallSize, maxBallSize := GUI_maxBallSize
+    BallSizeIncrement := GUI_BallSizeIncrement, EnableWheelResize := v_EnableWheelResize
+    IsAlwaysOnTop := v_IsAlwaysOnTop, IsLocked := v_IsLocked, HideInFullScreen := v_HideInFullScreen
+    SavePosition := v_SavePosition, SaveSize := v_SaveSize, EnableEdgeHide := v_EnableEdgeHide
+    SnapRange := GUI_SnapRange, HideMargin := GUI_HideMargin, HideDelay := GUI_HideDelay
+    EnableDynamicOpacity := v_EnableDynamicOpacity, MinOpacity := GUI_MinOpacity, MaxOpacity := GUI_MaxOpacity
+    hideOpacity := GUI_hideOpacity, MouseLeaveDelay := GUI_MouseLeaveDelay, FadeStep := GUI_FadeStep
+    TimeFormat := StrReplace(v_TimeFormat, "\n", "`n")
+    TimeFont := GUI_TimeFont, TimeColor := GUI_TimeColor, TimeFontRatio := GUI_TimeFontRatio, TimeOffsetY := GUI_TimeOffsetY
+    TimeFontBold := v_TimeFontBold, EnableTimeBg := v_EnableTimeBg, TimeBgColor := GUI_TimeBgColor
+    TimeCornerRatio := GUI_TimeCornerRatio, TimePaddingX := GUI_TimePaddingX, TimePaddingY := GUI_TimePaddingY
+    ShowCloseButton := v_ShowCloseButton, CloseBtnAction := v_CloseBtnAction
+    CloseBtn_X := GUI_CloseBtn_X, CloseBtn_Y := GUI_CloseBtn_Y, CloseBtn_HideTime := GUI_CloseBtn_HideTime
+    CloseBtn_Size := GUI_CloseBtn_Size, CloseBtn_Thickness := GUI_CloseBtn_Thickness, CloseBtn_VisualMargin := GUI_CloseBtn_VisualMargin
+    SelectedCopyKey := GUI_SelectedCopyKey, SelectedWaitTime := GUI_SelectedWaitTime, MaxTempFiles := GUI_MaxTempFiles
+    CfgMgr_UserConfigDir := GUI_CfgMgr_UserConfigDir, CfgMgr_EnableAutoBackup := v_CfgMgr_EnableAutoBackup, CfgMgr_MaxBackupCount := GUI_CfgMgr_MaxBackupCount
+
+    ; 4. 立即生效窗口置顶属性
+    WinSet, AlwaysOnTop, % (IsAlwaysOnTop = "1" ? "On" : "Off"), ahk_id %hBall%
+
+    ; 5. 重绘悬浮球与关闭按钮视觉
+    WinGetPos, curX, curY,,, ahk_id %hBall%
+    targetX := (GUI_X != "") ? GUI_X : curX
+    targetY := (GUI_Y != "") ? GUI_Y : curY
+
+    CurrentAlpha := MaxOpacity ; 应用后强制高亮显示，方便查看效果
+    UpdateBallDisplay(hBall, pBitmap, targetX, targetY, BallSize, CurrentAlpha)
+    UpdateCloseBtnDisplay(hCloseBtn, CloseBtn_Size, CloseBtn_Thickness, CloseBtn_VisualMargin, false, CurrentAlpha)
+
+    ; 6. 重新执行吸附边缘判定防越界
+    GoSub, HandleSnapping
+return
+
+CancelMainSettings:
+MainSettingsGuiEscape:
+MainSettingsGuiClose:
+    Gui, MainSettings: Destroy
+return
+
+; ==============================================================================
+; 新增：开机自启逻辑处理
+; ==============================================================================
+Label_AutoRun(Auto_Launch:="0"){
+    ; 使用 A_ScriptFullPath 兼容编译(.exe)与未编译(.ahk)环境
+    RegRead, Auto_Launch_reg, HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run, Floatyball
+    Auto_Launch_reg := (Auto_Launch_reg = A_ScriptFullPath) ? 1 : 0
+    
+    If(Auto_Launch != Auto_Launch_reg){
+        If(Auto_Launch){
+            RegWrite, REG_SZ, HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run, Floatyball, %A_ScriptFullPath%
+        }Else{
+            RegDelete, HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run, Floatyball
+        }
+    }
+}
+
+; ==============================================================================
+; 悬浮球【关于】面板
+; ==============================================================================
+ShowAboutGUI:
+    global hAboutGui, 当前工具版本
+
+    ; 如果窗口已存在，直接唤醒显示
+    if WinExist("ahk_id " hAboutGui) {
+        Gui, AboutGui: Show
+        return
+    }
+
+    ; 创建可调节大小的窗口 (+Resize)
+    Gui, AboutGui: New, +HwndhAboutGui +Resize +MaximizeBox
+    Gui, AboutGui: Color, 2B2B2B
+    Gui, AboutGui: Margin, 20, 20
+
+    ; 标题
+    Gui, AboutGui: Font, s14 cWhite w700, 微软雅黑
+    Gui, AboutGui: Add, Text, w360 Center vAboutTitle, Floatyball 悬浮球
+
+    ; 简介文本
+    Gui, AboutGui: Font, s10 cAAAAAA w400
+    Gui, AboutGui: Add, Text, y+15 w360 vAboutDesc, 📝 简介：一款高度可自定义的多功能桌面悬浮工具，支持动作快捷触发、文件多重拖放与动态时间显示。
+
+    ; 作者与版本信息
+    Gui, AboutGui: Font, s10 cWhite w400
+    Gui, AboutGui: Add, Text, y+20 w360 vAboutAuthor, 👤 作者：逍遥
+    Gui, AboutGui: Add, Text, y+10 w360 vAboutVersion, 🏷️ 版本：%当前工具版本%
+
+    ; Github 链接 (使用只读 Edit 控件方便复制)
+    Gui, AboutGui: Add, Text, y+20 w360 vAboutGithubLabel, 🌐 GitHub 项目地址 (请直接框选复制):
+    Gui, AboutGui: Font, s10 cBlack w400
+    Gui, AboutGui: Add, Edit, y+5 w360 h25 ReadOnly vAboutGithubLink, https://github.com/你的github用户名/Floatyball
+
+    ; 初始居中显示并自动计算宽高
+    Gui, AboutGui: Show, AutoSize Center, 关于 Floatyball
+return
+
+; ==============================================================================
+; 监听【关于】窗口大小改变事件，实现内部文本/输入框自适应拉伸
+; ==============================================================================
+AboutGuiGuiSize:
+    if (A_EventInfo = 1) ; 窗口最小化时不处理
+        return
+
+    ; 动态计算内部控件宽度 (总宽减去左右边距 20*2 = 40)
+    NewAboutW := A_GuiWidth - 40
+    
+    ; 给个最小宽度保护，防止把窗口缩得太小导致排版崩溃
+    if (NewAboutW < 200) 
+        NewAboutW := 200
+
+    ; 移动并拉伸控件
+    GuiControl, Move, AboutTitle, w%NewAboutW%
+    GuiControl, Move, AboutDesc, w%NewAboutW%
+    GuiControl, Move, AboutAuthor, w%NewAboutW%
+    GuiControl, Move, AboutVersion, w%NewAboutW%
+    GuiControl, Move, AboutGithubLabel, w%NewAboutW%
+    GuiControl, Move, AboutGithubLink, w%NewAboutW%
+return
+
+; ==============================================================================
+; 监听关闭事件销毁窗口，避免占用内存
+; ==============================================================================
+AboutGuiGuiClose:
+AboutGuiGuiEscape:
+    Gui, AboutGui: Destroy
+return
