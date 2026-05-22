@@ -67,7 +67,11 @@
 ---
 
 ## 📸 效果预览
-> （请在此处插入悬浮球效果图、时间模式截图、设置界面截图等）
+<img width="672" height="614" alt="PixPin exe_2026-05-22_22-55-18" src="https://github.com/user-attachments/assets/b96d436c-5d34-499e-8bd4-b78898796280" />
+<img width="538" height="534" alt="PixPin exe_2026-05-22_22-56-06" src="https://github.com/user-attachments/assets/434a5379-6851-4c9b-8627-02fc8a59e420" />
+<img width="630" height="470" alt="剪贴板图片 (1)" src="https://github.com/user-attachments/assets/af79e601-3a19-46d5-a9ad-2d4f0e48e8b9" />
+<img width="730" height="338" alt="剪贴板图片" src="https://github.com/user-attachments/assets/d244707a-6249-4b1a-b662-216cbc239b28" />
+
 
 ---
 
