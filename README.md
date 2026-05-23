@@ -77,7 +77,7 @@
 ---
 
 ## 📦 快速上手
-1. 下载最新版 `Floatyball.exe` 或克隆源码。
+1. 纯便携，无需安装。
 2. 将你的 `PNG/GIF` 图标放入 `Icons` 文件夹。
 3. 运行程序，**右键悬浮球** 进入菜单，一切皆可配。
 4. 享受高效、优雅的桌面操作体验！
@@ -85,10 +85,10 @@
 ---
 
 
-## 👤 作者
-**逍遥 (lch319)**  
-[GitHub 仓库](https://github.com/lch319/Floatyball) 欢迎 Star ⭐ 和 PR！
-
+## 👤 作者 与下载地址
+**逍遥**  
+[GitHub](https://github.com/lch319/Floatyball) 完全开源 欢迎 Star ⭐ 和 PR！
+[蓝奏云](https://wwbvp.lanzouu.com/b00yb4ssda) 密码:h2nl
 ---
 
 > 如果你觉得 Floatyball 让你的桌面变得更顺手，就送它一颗小星星吧 💫  
