@@ -1,5 +1,5 @@
 ﻿; 编译exe文件信息及版本号设置
-当前工具版本:="1.6.2"                  ;设置版本号
+当前工具版本:="1.6.3"                  ;设置版本号
 ;@Ahk2Exe-Obey U_bits, = "%A_PtrSize%>4" ? "-64bit" : "-32bit"  ;判断位数
 ;@Ahk2Exe-Let U_version = %A_PriorLine~U)^(.+"){1}(.+)".*$~$2%  ;读取版本号以编译
 ;@Ahk2Exe-SetMainIcon Floatyball.ico          ; 指定托盘图标文件
@@ -1253,6 +1253,9 @@ ToggleBallVisibility:
     }
 return
 
+; ==============================================================================
+; 编辑模式状态切换 (已升级：圆角自适应高分屏UI)
+; ==============================================================================
 ToggleEditMode:
     IsEditMode := !IsEditMode
     if (IsEditMode) {
@@ -1265,14 +1268,28 @@ ToggleEditMode:
         Gui, EditPrompt: Destroy
         Gui, EditPrompt: +AlwaysOnTop +ToolWindow -Caption +E0x20 +HwndhEditGui
         Gui, EditPrompt: Color, 2b2b2b
-        Gui, EditPrompt: Margin, 25, 20
+        Gui, EditPrompt: Margin, 0, 0
+
+        W := 250, H := 135
+        
+        ; === 【应用系统 DPI 缩放并绘制圆角】 ===
+        DPIScale := A_ScreenDPI / 96
+        RealW := Round(W * DPIScale)
+        RealH := Round(H * DPIScale)
+        RealRgn := Round(15 * DPIScale)
+        
+        SetWindowRgn(hEditGui, RealW, RealH, RealRgn)
+        DrawRoundedBackground_API(hEditGui, RealW, RealH, RealRgn, 0xFF2B2B2B, 0xFF3D3D3D)
+        ; ======================================
+
         Gui, EditPrompt: Font, s12 cWhite w700, 微软雅黑
-        Gui, EditPrompt: Add, Text, Center w200, 🛠️ 编 辑 模 式
+        ; 注意：这里加入了 BackgroundTrans 确保文字背景透明，融入圆角底色
+        Gui, EditPrompt: Add, Text, x0 y20 w%W% Center BackgroundTrans, 🛠️ 编 辑 模 式
         Gui, EditPrompt: Font, s10 cAAAAAA w400
-        Gui, EditPrompt: Add, Text, Center w200 , [方向键] 移动位置`n[+ / -] 调整大小`n`n👉 右键点击悬浮球退出
+        Gui, EditPrompt: Add, Text, x0 y55 w%W% Center BackgroundTrans, [方向键] 移动位置`n[+ / -] 调整大小`n`n👉 右键点击悬浮球退出
 
         ; 居中显示在屏幕顶部，不抢焦点
-        Gui, EditPrompt: Show, NoActivate y80, EditPromptGui
+        Gui, EditPrompt: Show, w%W% h%H% NoActivate y80, EditPromptGui
         WinSet, Transparent, 230, ahk_id %hEditGui%
     } else {
         GoSub, ExitEditMode
@@ -2145,14 +2162,22 @@ ShowEventSettingsGUI:
     Gui, EventSettings: Margin, 0, 0
 
     W := 720, H := 325
-    SetWindowRgn(hEventGui, W, H, 20)
-    DrawRoundedBackground_API(hEventGui, W, H, 15, 0xFF2B2B2B, 0xFF3D3D3D)
+    
+    ; === 【修复系统缩放裁剪问题】 获取系统 DPI，按比例放大 GDI 绘图区域 ===
+    DPIScale := A_ScreenDPI / 96
+    RealW := Round(W * DPIScale)
+    RealH := Round(H * DPIScale)
+    RealRgn := Round(20 * DPIScale)
+    RealBgRadius := Round(15 * DPIScale)
+    
+    SetWindowRgn(hEventGui, RealW, RealH, RealRgn)
+    DrawRoundedBackground_API(hEventGui, RealW, RealH, RealBgRadius, 0xFF2B2B2B, 0xFF3D3D3D)
+    ; ====================================================================
 
     Gui, EventSettings: Font, s12 cWhite w700, 微软雅黑
     Gui, EventSettings: Add, Text, x20 y5 w680 h40 BackgroundTrans gGuiDrag, 悬浮球事件高级设置
 
     ; Tab 高度同步撑大到 215
-    ; ... (保留前置的背景绘制和Tab声明代码) ...
     Gui, EventSettings: Font, s9 cAAAAAA w400, 微软雅黑
     Gui, EventSettings: Add, Tab3, x15 y45 w690 h215 cWhite, 左键单击|中键单击|滚轮向上|滚轮向下|拖放文件|拖放文本
 
@@ -2906,8 +2931,17 @@ ShowMainSettingsGUI:
     Gui, MainSettings: Margin, 15, 15
 
     W := 620, H := 460
-    SetWindowRgn(hMainGui, W, H, 20)
-    DrawRoundedBackground_API(hMainGui, W, H, 15, 0xFF2B2B2B, 0xFF3D3D3D)
+    
+    ; === 【修复系统缩放裁剪问题】 获取系统 DPI，按比例放大 GDI 绘图区域 ===
+    DPIScale := A_ScreenDPI / 96
+    RealW := Round(W * DPIScale)
+    RealH := Round(H * DPIScale)
+    RealRgn := Round(20 * DPIScale)
+    RealBgRadius := Round(15 * DPIScale)
+    
+    SetWindowRgn(hMainGui, RealW, RealH, RealRgn)
+    DrawRoundedBackground_API(hMainGui, RealW, RealH, RealBgRadius, 0xFF2B2B2B, 0xFF3D3D3D)
+    ; ====================================================================
 
     ; 标题
     Gui, MainSettings: Font, s12 cWhite w700, 微软雅黑
@@ -2916,6 +2950,7 @@ ShowMainSettingsGUI:
     ; 选项卡定义 (新增第6个Tab用于管理备份)
     Gui, MainSettings: Font, s9 cAAAAAA w400, 微软雅黑
     Gui, MainSettings: Add, Tab3, x15 y45 w590 h360 cWhite, 基础与外观|行为与隐藏|透明度控制|时间模式|关闭与高阶|配置管理与备份
+
 
 ; --------------------------------------------------
     ; Tab 1: 基础与外观
