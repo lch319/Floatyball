@@ -78,8 +78,8 @@
 <img width="538" height="534" alt="PixPin exe_2026-05-22_22-56-06" src="https://github.com/user-attachments/assets/434a5379-6851-4c9b-8627-02fc8a59e420" />
 <img width="630" height="470" alt="剪贴板图片 (1)" src="https://github.com/user-attachments/assets/af79e601-3a19-46d5-a9ad-2d4f0e48e8b9" />
 <img width="730" height="338" alt="剪贴板图片" src="https://github.com/user-attachments/assets/d244707a-6249-4b1a-b662-216cbc239b28" />
+<img width="1640" height="1022" alt="PixPin_2026-05-30_07-46-07" src="https://github.com/user-attachments/assets/305d899d-a309-4288-b0d3-5d37b9168a6f" />
 
-*(💡 建议：你可以在这里补充一两张悬停面板展开，以及深浅主题对比的截图或 GIF 动图，效果会更好哦！)*
 
 ---
 
