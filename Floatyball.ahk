@@ -1,5 +1,5 @@
 ﻿; 编译exe文件信息及版本号设置
-当前工具版本:="1.6.3"                  ;设置版本号
+当前工具版本:="1.7.0"                  ;设置版本号
 ;@Ahk2Exe-Obey U_bits, = "%A_PtrSize%>4" ? "-64bit" : "-32bit"  ;判断位数
 ;@Ahk2Exe-Let U_version = %A_PriorLine~U)^(.+"){1}(.+)".*$~$2%  ;读取版本号以编译
 ;@Ahk2Exe-SetMainIcon Floatyball.ico          ; 指定托盘图标文件
@@ -171,6 +171,49 @@ if !InStr(FileExist(CfgMgr_UserConfigDir), "D")
 if !InStr(FileExist(CfgMgr_UserConfigDir "\backup"), "D")
     FileCreateDir, % CfgMgr_UserConfigDir "\backup"
 
+; ==============================================================================
+; --- 新增：悬停面板配置读取 (自动保存于 Settings.ini 的 [悬停面板] 段落) ---
+; ==============================================================================
+HoverPanel_Enable := Var_Read("Enable", "1", "悬停面板", A_ScriptDir "\Settings.ini", "否") ; 是否启用悬停面板 (1=启用, 0=停用)
+HoverPanel_ShowDelay := Var_Read("ShowDelay", "350", "悬停面板", A_ScriptDir "\Settings.ini", "否") ; 鼠标悬浮多少毫秒后触发显示
+HoverPanel_HideDelay := Var_Read("HideDelay", "200", "悬停面板", A_ScriptDir "\Settings.ini", "否") ; 鼠标移出多少毫秒后触发隐藏
+HoverPanel_Width := Var_Read("Width", "330", "悬停面板", A_ScriptDir "\Settings.ini", "否") ; 悬停面板的固定宽度 (像素)
+HoverPanel_BgColor := Var_Read("BgColor", "2B2B2B", "悬停面板", A_ScriptDir "\Settings.ini", "否") ; 面板背景色 (Hex格式)
+HoverPanel_FontColor := Var_Read("FontColor", "FFFFFF", "悬停面板", A_ScriptDir "\Settings.ini", "否") ; 面板文字色 (Hex格式)
+HoverPanel_IconSize := Var_Read("IconSize", "24", "悬停面板", A_ScriptDir "\Settings.ini", "否") ; 左侧图标的尺寸
+HoverPanel_ItemHeight := Var_Read("ItemHeight", "30", "悬停面板", A_ScriptDir "\Settings.ini", "否") ; 单个菜单项的垂直行高间距
+HoverPanel_FontSize := Var_Read("FontSize", "10", "悬停面板", A_ScriptDir "\Settings.ini", "否") ; 菜单项文字大小
+HoverPanel_FontName := Var_Read("FontName", "微软雅黑", "悬停面板", A_ScriptDir "\Settings.ini", "否")  ; 菜单项字体名称
+HoverPanel_TextOffsetY := Var_Read("TextOffsetY", "-6", "悬停面板", A_ScriptDir "\Settings.ini", "否")  ; 文字垂直偏移（负数向上，正数向下）
+
+HoverPanel_ItemWidth := Var_Read("ItemWidth", "155", "悬停面板", A_ScriptDir "\Settings.ini", "否") ; 单个菜单项的固定宽度
+HoverPanel_GUIHeight := Var_Read("GUIHeight", "300", "悬停面板", A_ScriptDir "\Settings.ini", "否") ; gui窗口的整体最低高度
+
+; ▼▼▼ 新增：悬停高亮配置 ▼▼▼
+HoverPanel_EnableHoverHighlight := Var_Read("EnableHoverHighlight", "1", "悬停面板", A_ScriptDir "\Settings.ini", "否") ; 是否启用悬停高亮
+HoverPanel_HoverBgColor := Var_Read("HoverBgColor", "404040", "悬停面板", A_ScriptDir "\Settings.ini", "否") ; 悬停高亮背景色
+HoverPanel_HoverCornerRadius := Var_Read("HoverCornerRadius", "5", "悬停面板", A_ScriptDir "\Settings.ini", "否") ; 悬停高亮背景的圆角大小(填0为直角)
+
+HoverPanel_ShowTooltip := Var_Read("ShowTooltip", "1", "悬停面板", A_ScriptDir "\Settings.ini", "否") ; 是否显示悬停提示
+HoverPanel_TooltipDelay := Var_Read("TooltipDelay", "600", "悬停面板", A_ScriptDir "\Settings.ini", "否") ; 悬停提示延迟触发(毫秒)
+HoverPanel_Margin := Var_Read("Margin", "8", "悬停面板", A_ScriptDir "\Settings.ini", "否") ; 面板的全局边缘间距
+
+; === 新增：加载全局主题配色 ===
+GoSub, LoadThemeConfig
+
+;; 声明悬停面板所需的运行时全局变量
+
+global HoverPanel_ShowTooltip, HoverPanel_TooltipDelay
+global CurrentTooltipControl := "", HoverTooltipLastCtrl := ""
+global HoverPanel_EnableHoverHighlight, HoverPanel_HoverBgColor, HoverPanel_HoverCornerRadius
+global hHoverPanel, isHoverPanelPinned := false, HoverPanel_Margin
+
+global hHoverPanel, isHoverPanelPinned := false
+global HoverGroups := [], HoverItemsData := [], CurrentHoverGroup := ""
+global HoverPanelVisible := false, HoverTriggerTime := 0, LastPanelActiveTime := 0
+global isHoverPanelEditMode := false       ; 【新增】标记是否处于批量删除模式
+global HoverPanelSelectedItems := {}       ; 【新增】存储被选中的项目索引
+
 ; --- 悬浮球点击事件配置 ---
 ; 左键单击
 LBtn_Enable := Var_Read("启用","1","左键单击事件",A_ScriptDir "\Settings.ini","否")
@@ -259,7 +302,7 @@ DropText_Param_shift  := Var_Read("功能参数_shift","","拖放事件_文本",
 #SingleInstance Force   ;~运行替换旧实例
 ;#Include *i %A_ScriptDir%\..\RunAny_ObjReg.ahk
 #Include %A_ScriptDir%\lib\Gdip_All.ahk
-#Include %A_ScriptDir%\lib\Helper_function.ahk
+;#Include %A_ScriptDir%\lib\Helper_function.ahk
 SetWinDelay, -1
 SetBatchLines, -1
 CoordMode, Mouse, Screen
@@ -364,6 +407,7 @@ else
 
 ; 拦截托盘图标鼠标消息 (实现左键显示，右键打开悬浮球菜单)
 OnMessage(0x404, "AHK_NOTIFYICON")
+OnMessage(0x0200, "WM_MOUSEMOVE") ; 注册鼠标移动事件，用于处理悬停面板的 ToolTip
 
 ; --- 注册全局显示/隐藏快捷键 ---
 if (ToggleHotkey != "") {
@@ -371,6 +415,13 @@ if (ToggleHotkey != "") {
     if (EnableHotkey != "1")
         Hotkey, %ToggleHotkey%, Off ; 如果配置不启用，则关闭热键
 }
+
+IconDir := A_ScriptDir "\Icons"
+if !FileExist(IconDir)
+    FileCreateDir, %IconDir%
+
+; 【新增】初始化读取悬停面板配置文件
+LoadHoverItems()
 
 OnExit, 退出时运行
 return
@@ -397,8 +448,18 @@ return
             DeltaY := CurrentMouseY - StartMouseY
 
             ; 如果偏移超过2像素，才认为开始拖拽（防手抖，防误触点击）
-            if (!HasMoved && (Abs(DeltaX) > 2 || Abs(DeltaY) > 2))
+            if (!HasMoved && (Abs(DeltaX) > 2 || Abs(DeltaY) > 2)) {
                 HasMoved := true
+
+                ; ▼▼▼ 【修复】：一旦判定为拖拽，仅在面板【未固定】时才销毁它 ▼▼▼
+                if (HoverPanelVisible && !isHoverPanelPinned) {
+                    DllCall("ole32\RevokeDragDrop", "Ptr", hHoverPanel) ; <--- 新增
+                    Gui, HoverPanel: Destroy
+                    HoverPanelVisible := false
+                    HoverTriggerTime := 0
+                }
+                ; ▲▲▲ ========================================================== ▲▲▲
+            }
 
             if (HasMoved && IsLocked != "1")
             {
@@ -507,8 +568,11 @@ return
         GoSub, HandleSnapping
     return
 
-    *~RButton up:: GoSub, RightClickAction
-    *~MButton up:: GoSub, MiddleClickAction
+    *RButton:: return  ; 拦截右键按下事件，防止系统产生多余焦点变化
+    *RButton up:: GoSub, RightClickAction
+
+    *MButton:: return  ; 同样拦截中键按下事件
+    *MButton up:: GoSub, MiddleClickAction
 #If
 
 #If MouseIsHwnd(hCloseBtn)
@@ -636,12 +700,20 @@ WatchMouse:
         ; 判断是否全屏且不是桌面背景
         if (actClass != "WorkerW" && actClass != "Progman" && ax <= monLeft && ay <= monTop && aw >= (monRight-monLeft) && ah >= (monBottom-monTop)) {
             if (!IsFullScreenHidden) {
+                ; 【补充修复】全屏隐藏前记录坐标
+                WinGetPos, preHideX, preHideY,,, ahk_id %hBall%
+
                 WinHide, ahk_id %hBall%
                 WinHide, ahk_id %hCloseBtn%
                 IsFullScreenHidden := true
             }
             return ; 全屏状态下直接跳过后续的透明度和位置计算
         } else if (IsFullScreenHidden) {
+            ; 【补充修复】全屏结束重新显示前，强制刷回原坐标
+            if (preHideX != "" && preHideY != "") {
+                UpdateBallDisplay(hBall, pBitmap, preHideX, preHideY, BallSize, CurrentAlpha)
+            }
+
             WinShow, ahk_id %hBall%
             IsFullScreenHidden := false
             ; 【新增】全屏结束重新显示时，恢复动画
@@ -657,14 +729,49 @@ WatchMouse:
     if (GetKeyState("LButton", "P"))
         return
 
+    ; --- 将原有的 IsHovered 判定替换为以下内容 ---
     MouseGetPos, mx, my, mWin
     IsOnBall := (mWin = hBall)
     IsOnClose := (mWin = hCloseBtn)
-    IsHovered := (IsOnBall || IsOnClose)
+    IsOnHoverPanel := (mWin = hHoverPanel) ; 【新增】判断鼠标是否在悬停面板上
+    IsHovered := (IsOnBall || IsOnClose || IsOnHoverPanel) ; 【修改】只要在三者其一，都视为悬停状态
 
-    ;只要鼠标在球或按钮上，就刷新时间戳
+    ; ▼▼▼ 新增：鼠标离开面板时，立即清除悬停提示 ▼▼▼
+    if (!IsOnHoverPanel && HoverTooltipLastCtrl != "") {
+        ToolTip
+        SetTimer, ShowHoverTooltip, Off
+        HoverTooltipLastCtrl := ""
+        CurrentTooltipControl := ""
+    }
+
+    ; 只要鼠标在球、按钮或面板上，就刷新时间戳
     if (IsHovered)
         BallLastHoverTime := A_TickCount
+
+    ; =================================================================
+    ; 【新增】悬停面板的触发与自动隐藏逻辑
+    ; =================================================================
+    if (HoverPanel_Enable = "1" && !IsEditMode && !IsHidden) {
+        if (IsHovered) {
+            LastPanelActiveTime := A_TickCount
+            if (!HoverPanelVisible && !isHoverPanelPinned) {
+                if (HoverTriggerTime = 0)
+                    HoverTriggerTime := A_TickCount
+                else if (A_TickCount - HoverTriggerTime > HoverPanel_ShowDelay) {
+                    GoSub, ShowHoverPanelGUI
+                    HoverTriggerTime := 0
+                }
+            }
+        } else {
+            HoverTriggerTime := 0 ; 鼠标离开，重置触发进度
+            ; 离开时间超过设定延迟，且没有开启图钉固定时，销毁面板
+            if (HoverPanelVisible && !isHoverPanelPinned && (A_TickCount - LastPanelActiveTime > HoverPanel_HideDelay)) {
+                DllCall("ole32\RevokeDragDrop", "Ptr", hHoverPanel) ; <--- 新增
+                Gui, HoverPanel: Destroy
+                HoverPanelVisible := false
+            }
+        }
+    }
 
     ; --- 关闭按钮的状态切换 ---
     if (IsOnClose != CloseBtn_Hover) {
@@ -900,6 +1007,7 @@ RightClickAction:
     Menu, MenuMore, Add, 关闭按钮仅隐藏, ToggleCloseBtnAction
     Menu, MenuMore, Add, 显示托盘图标, ToggleTrayIcon
     Menu, MenuMore, Add, 动态透明度, ToggleDynamicOpacity
+    Menu, MenuMore, Add, 切换深浅主题, ToggleThemeMode ; <--- 新增此行
     Menu, MenuMore, Add  ; 分割线
     Menu, MenuMore, Add, 退出时保存大小, ToggleSaveSize
     Menu, MenuMore, Add, 退出时保存位置, ToggleSavePosition
@@ -909,7 +1017,16 @@ RightClickAction:
     Menu, MenuMore, Add, 全部重置, ResetAll
     Menu, MenuMore, Add, 编辑模式, ToggleEditMode
     Menu, MenuMore, Add  ; 分割线
-    Menu, MenuMore, Add, 隐藏到托盘, HideToTray
+
+    ; ▼▼▼ 修改点：将执行标签改为 ToggleBallVisibility，并加入状态判定 ▼▼▼
+    Menu, MenuMore, Add, 隐藏到托盘, ToggleBallVisibility
+
+    ; 利用现有的系统底层调用来判断悬浮球是否隐藏
+    if !DllCall("IsWindowVisible", "Ptr", hBall)
+        Menu, MenuMore, Check, 隐藏到托盘
+    else
+        Menu, MenuMore, Uncheck, 隐藏到托盘
+    ; ▲▲▲ 修改点结束 ▲▲▲
 
     Menu, MyMenu, Add, % "全局快捷键 (" ToggleHotkey ")", ToggleHotkeyEnable
     ; 动态创建/刷新菜单
@@ -987,7 +1104,6 @@ RightClickAction:
     Menu, MyMenu, Add, 停用, ToggleSuspend
     Menu, MyMenu, Add, 关于, ShowAboutGui
     Menu, MyMenu, Add  ; 分割线
-
 
     Menu, MyMenu, Add, 退出, 退出时运行
 
@@ -1213,6 +1329,9 @@ ToggleSavePosition:
 return
 
 HideToTray:
+    ; 【修复点1】在隐藏前，记录下当前的精确坐标
+    WinGetPos, preHideX, preHideY,,, ahk_id %hBall%
+
     if (ShowTrayIcon = "0") {
         Menu, Tray, Icon ; 临时显示托盘图标，防止悬浮球和图标同时消失找不回来
     }
@@ -1222,10 +1341,16 @@ HideToTray:
 return
 
 ShowBallFromTray:
+    ; 【修复点2】在显示前，使用底层 GDI+ 恢复原坐标和透明度，覆盖系统的默认坐标
+    if (preHideX != "" && preHideY != "") {
+        UpdateBallDisplay(hBall, pBitmap, preHideX, preHideY, BallSize, CurrentAlpha)
+    }
+
     WinShow, ahk_id %hBall%
     ; 如果之前是因为隐藏到托盘临时开启的图标，恢复原状
     if (ShowTrayIcon = "0")
         Menu, Tray, NoIcon
+
     GoSub, HandleSnapping ; 防越界修正
 
     ; 【新增】从托盘或快捷键恢复显示时，重新唤醒 GIF 动画
@@ -1267,25 +1392,25 @@ ToggleEditMode:
         ; 2. 创建美化的无边框半透明提示窗 (HUD样式，并开启鼠标穿透 +E0x20)
         Gui, EditPrompt: Destroy
         Gui, EditPrompt: +AlwaysOnTop +ToolWindow -Caption +E0x20 +HwndhEditGui
-        Gui, EditPrompt: Color, 2b2b2b
+        Gui, EditPrompt: Color, %G_BgColor%
         Gui, EditPrompt: Margin, 0, 0
 
         W := 250, H := 135
-        
+
         ; === 【应用系统 DPI 缩放并绘制圆角】 ===
         DPIScale := A_ScreenDPI / 96
         RealW := Round(W * DPIScale)
         RealH := Round(H * DPIScale)
         RealRgn := Round(15 * DPIScale)
-        
+
         SetWindowRgn(hEditGui, RealW, RealH, RealRgn)
-        DrawRoundedBackground_API(hEditGui, RealW, RealH, RealRgn, 0xFF2B2B2B, 0xFF3D3D3D)
+        DrawRoundedBackground_API(hEditGui, RealW, RealH, RealRgn, G_BgARGB, G_BorderARGB)
         ; ======================================
 
-        Gui, EditPrompt: Font, s12 cWhite w700, 微软雅黑
+        Gui, EditPrompt: Font, s12 c%G_FontColor% w700, 微软雅黑
         ; 注意：这里加入了 BackgroundTrans 确保文字背景透明，融入圆角底色
         Gui, EditPrompt: Add, Text, x0 y20 w%W% Center BackgroundTrans, 🛠️ 编 辑 模 式
-        Gui, EditPrompt: Font, s10 cAAAAAA w400
+        Gui, EditPrompt: Font, s10 c%G_SubFontColor% w400
         Gui, EditPrompt: Add, Text, x0 y55 w%W% Center BackgroundTrans, [方向键] 移动位置`n[+ / -] 调整大小`n`n👉 右键点击悬浮球退出
 
         ; 居中显示在屏幕顶部，不抢焦点
@@ -2158,28 +2283,28 @@ ShowEventSettingsGUI:
 
     ; 保持全宽 720，高度稍微撑大 10px 到 325，给内部留出向下挪动的空间
     Gui, EventSettings: New, +HwndhEventGui -Caption
-    Gui, EventSettings: Color, 2B2B2B
+    Gui, EventSettings: Color, %G_BgColor%
     Gui, EventSettings: Margin, 0, 0
 
     W := 720, H := 325
-    
+
     ; === 【修复系统缩放裁剪问题】 获取系统 DPI，按比例放大 GDI 绘图区域 ===
     DPIScale := A_ScreenDPI / 96
     RealW := Round(W * DPIScale)
     RealH := Round(H * DPIScale)
     RealRgn := Round(20 * DPIScale)
     RealBgRadius := Round(15 * DPIScale)
-    
+
     SetWindowRgn(hEventGui, RealW, RealH, RealRgn)
-    DrawRoundedBackground_API(hEventGui, RealW, RealH, RealBgRadius, 0xFF2B2B2B, 0xFF3D3D3D)
+    DrawRoundedBackground_API(hEventGui, RealW, RealH, RealBgRadius, G_BgARGB, G_BorderARGB)
     ; ====================================================================
 
-    Gui, EventSettings: Font, s12 cWhite w700, 微软雅黑
+    Gui, EventSettings: Font, s12 c%G_FontColor% w700, 微软雅黑
     Gui, EventSettings: Add, Text, x20 y5 w680 h40 BackgroundTrans gGuiDrag, 悬浮球事件高级设置
 
     ; Tab 高度同步撑大到 215
-    Gui, EventSettings: Font, s9 cAAAAAA w400, 微软雅黑
-    Gui, EventSettings: Add, Tab3, x15 y45 w690 h215 cWhite, 左键单击|中键单击|滚轮向上|滚轮向下|拖放文件|拖放文本
+    Gui, EventSettings: Font, s9 c%G_SubFontColor% w400, 微软雅黑
+    Gui, EventSettings: Add, Tab3, x15 y45 w690 h215 c%G_FontColor%, 左键单击|中键单击|滚轮向上|滚轮向下|拖放文件|拖放文本
 
     Loop, 6 {
         idx := A_Index
@@ -2193,7 +2318,7 @@ ShowEventSettingsGUI:
         curEnableShift := %pref%_Enable_shift, curTypeShift := %pref%_Type_shift, curParamShift := %pref%_Param_shift
 
         ; --- 第 1 行：无修饰键 (Y基准下移至 80) ---
-        Gui, EventSettings: Add, Text, x20 y83 cWhite w75, 【无修饰键】
+        Gui, EventSettings: Add, Text, x20 y83 c%G_FontColor% w75, 【无修饰键】
         Gui, EventSettings: Add, Checkbox, % "x95 y83 w45 v" pref "_EnableChecked " (curEnable="1" ? "Checked" : ""), 启用
         Gui, EventSettings: Add, DropDownList, % "x140 y80 w130 v" pref "_TypeChoice Choose" curType, %TypeDesc%
         Gui, EventSettings: Add, Edit, % "x275 y80 w285 h25 v" pref "_ParamEdit cBlack", %curParam%
@@ -2252,14 +2377,14 @@ OpenLargeEditor:
     Gui, LargeEditor: Destroy
 
     Gui, LargeEditor: +OwnerEventSettings +Resize +MaximizeBox
-    Gui, LargeEditor: Color, 2B2B2B
+    Gui, LargeEditor: Color, %G_BgColor%
     ; 【修改】：边距极度紧凑化 (原为 15, 15)
     Gui, LargeEditor: Margin, 4, 4
 
     Gui, LargeEditor: Font, s10 cBlack w400, 微软雅黑
     Gui, LargeEditor: Add, Edit, w800 h500 vLargeEditText Multi VScroll HScroll, %CurrentText%
 
-    Gui, LargeEditor: Font, s9 cBlack w400, 微软雅黑
+    Gui, LargeEditor: Font, s9 c%G_FontColor% w400, 微软雅黑
 
     ; 【新增】：在左侧添加占位符说明按钮
     Gui, LargeEditor: Add, Button, x4 y530 w110 h30 gShowPlaceholderHelp vBtnLargeHelp, ❓ 占位符说明
@@ -2355,7 +2480,7 @@ TestRunParam:
     Gui, ParsePreview: Destroy
 
     Gui, ParsePreview: +OwnerEventSettings +Resize +MaximizeBox
-    Gui, ParsePreview: Color, 2B2B2B
+    Gui, ParsePreview: Color, %G_BgColor%
     ; 【修改】：边距缩短为 4
     Gui, ParsePreview: Margin, 4, 4
 
@@ -2370,9 +2495,9 @@ TestRunParam:
 
         Gui, ParsePreview: Font, s10 cBlack w400, 微软雅黑
         ; 【修改】：纵向间距从 y+10 缩小为 y+6
-        Gui, ParsePreview: Add, Edit, cWhite y+6 w550 h250 ReadOnly Multi vPreviewEdit VScroll HScroll, %outStr%
+        Gui, ParsePreview: Add, Edit, c%G_FontColor% y+6 w550 h250 ReadOnly Multi vPreviewEdit VScroll HScroll, %outStr%
 
-        Gui, ParsePreview: Font, s9 cWhite w400, 微软雅黑
+        Gui, ParsePreview: Font, s9 c%G_FontColor% w400, 微软雅黑
         ; 【修改】：纵向间距缩小为 y+8
         Gui, ParsePreview: Add, Button, x340 y+8 w100 h30 Default gConfirmRunTest vBtnPreviewConfirm, 确认执行
         Gui, ParsePreview: Add, Button, x444 yp w100 h30 gCloseParsePreview vBtnPreviewCancel, 取消
@@ -2384,14 +2509,14 @@ TestRunParam:
         TestRun_DropData := dummyDropData
         TestRun_DropType := dummyDropType
     } else {
-        Gui, ParsePreview: Font, s11 cWhite w700, 微软雅黑
+        Gui, ParsePreview: Font, s11 c%G_FontColor% w700, 微软雅黑
         Gui, ParsePreview: Add, Text, w550, 🔍 解析结果预览
 
         Gui, ParsePreview: Font, s10 cBlack w400, 微软雅黑
         ; 【修改】：纵向间距从 y+10 缩小为 y+6
-        Gui, ParsePreview: Add, Edit, cWhite y+6 w550 h250 ReadOnly Multi vPreviewEdit VScroll HScroll, %outStr%
+        Gui, ParsePreview: Add, Edit, c%G_FontColor% y+6 w550 h250 ReadOnly Multi vPreviewEdit VScroll HScroll, %outStr%
 
-        Gui, ParsePreview: Font, s9 cWhite w400, 微软雅黑
+        Gui, ParsePreview: Font, s9 c%G_FontColor% w400, 微软雅黑
         ; 【修改】：纵向间距缩小为 y+8
         Gui, ParsePreview: Add, Button, x444 y+8 w100 h30 Default gCloseParsePreview vBtnPreviewClose, 关闭
         Gui, ParsePreview: Show, Center, 仅解析预览
@@ -2527,14 +2652,14 @@ ShowPlaceholderHelp:
     Gui, HelpGui: Destroy
     ; 允许调整大小和最大化
     Gui, HelpGui: +OwnerEventSettings +Resize +MaximizeBox
-    Gui, HelpGui: Color, 2B2B2B
+    Gui, HelpGui: Color, %G_BgColor%
 
     ; 【优化】将边距从 12 缩小到 6，让编辑框极其贴近窗口边缘
     Gui, HelpGui: Margin, 4, 4
 
     Gui, HelpGui: Font, s10 cBlack w400, 微软雅黑
     ; 【优化】去掉了标题文本和按钮，Edit 框直接从 x6 y6 开始，填满初始窗口
-    Gui, HelpGui: Add, Edit, x6 y6 w560 h720 ReadOnly vHelpEdit cWhite Multi VScroll HScroll, %helpText%
+    Gui, HelpGui: Add, Edit, x6 y6 w560 h720 ReadOnly vHelpEdit c%G_FontColor% Multi VScroll HScroll, %helpText%
 
     Gui, HelpGui: Show,, 占位符说明
 return
@@ -2927,70 +3052,68 @@ ShowMainSettingsGUI:
 
     ; 创建暗色无边框窗口
     Gui, MainSettings: New, +HwndhMainGui -Caption
-    Gui, MainSettings: Color, 2B2B2B
+    Gui, MainSettings: Color, %G_BgColor%
     Gui, MainSettings: Margin, 15, 15
 
     W := 620, H := 460
-    
+
     ; === 【修复系统缩放裁剪问题】 获取系统 DPI，按比例放大 GDI 绘图区域 ===
     DPIScale := A_ScreenDPI / 96
     RealW := Round(W * DPIScale)
     RealH := Round(H * DPIScale)
     RealRgn := Round(20 * DPIScale)
     RealBgRadius := Round(15 * DPIScale)
-    
+
     SetWindowRgn(hMainGui, RealW, RealH, RealRgn)
-    DrawRoundedBackground_API(hMainGui, RealW, RealH, RealBgRadius, 0xFF2B2B2B, 0xFF3D3D3D)
+    DrawRoundedBackground_API(hMainGui, RealW, RealH, RealBgRadius, G_BgARGB, G_BorderARGB)
     ; ====================================================================
 
     ; 标题
-    Gui, MainSettings: Font, s12 cWhite w700, 微软雅黑
+    Gui, MainSettings: Font, s12 c%G_FontColor% w700, 微软雅黑
     Gui, MainSettings: Add, Text, x20 y10 w580 h30 BackgroundTrans gGuiDrag, ⚙️ 全局基础设置
 
-    ; 选项卡定义 (新增第6个Tab用于管理备份)
-    Gui, MainSettings: Font, s9 cAAAAAA w400, 微软雅黑
-    Gui, MainSettings: Add, Tab3, x15 y45 w590 h360 cWhite, 基础与外观|行为与隐藏|透明度控制|时间模式|关闭与高阶|配置管理与备份
+    ; 选项卡定义 (新增第7个Tab用于悬停面板设置)
+    Gui, MainSettings: Font, s9 c%G_SubFontColor% w400, 微软雅黑
+    Gui, MainSettings: Add, Tab3, x15 y45 w590 h360 c%G_FontColor%, 基础与外观|行为与隐藏|透明度控制|时间模式|关闭与高阶|配置管理与备份|悬停面板
 
-
-; --------------------------------------------------
+    ; --------------------------------------------------
     ; Tab 1: 基础与外观
     ; --------------------------------------------------
     Gui, MainSettings: Tab, 1
-    
-    ; 【新增：将两项配置放在第一行】
+
     Gui, MainSettings: Add, Checkbox, x30 y85 w150 vGUI_AdminLaunch Checked%AdminLaunch%, 以管理员权限运行
     Gui, MainSettings: Add, Checkbox, x200 y85 w150 vGUI_AutoRun Checked%AutoRun%, 开机自动启动
 
-    ; 【下方原有选项整体下移 40 像素】
-    Gui, MainSettings: Add, Text, x30 y125 cWhite w100, 悬浮球默认大小:
+    Gui, MainSettings: Add, Text, x30 y125 c%G_FontColor% w100, 悬浮球默认大小:
     Gui, MainSettings: Add, Edit, x140 y120 w80 h25 vGUI_BallSize cBlack, %BallSize%
-
-    Gui, MainSettings: Add, Text, x30 y165 cWhite w100, 最小限制大小:
+    Gui, MainSettings: Add, Text, x30 y165 c%G_FontColor% w100, 最小限制大小:
     Gui, MainSettings: Add, Edit, x140 y160 w80 h25 vGUI_minBallSize cBlack, %minBallSize%
-    Gui, MainSettings: Add, Text, x250 y165 cWhite w100, 最大限制大小:
+    Gui, MainSettings: Add, Text, x250 y165 c%G_FontColor% w100, 最大限制大小:
     Gui, MainSettings: Add, Edit, x360 y160 w80 h25 vGUI_maxBallSize cBlack, %maxBallSize%
 
-    Gui, MainSettings: Add, Text, x30 y205 cWhite w100, 滚轮缩放增量:
+    Gui, MainSettings: Add, Text, x30 y205 c%G_FontColor% w100, 滚轮缩放增量:
     Gui, MainSettings: Add, Edit, x140 y200 w80 h25 vGUI_BallSizeIncrement cBlack, %BallSizeIncrement%
     Gui, MainSettings: Add, Checkbox, x250 y205 w150 vGUI_EnableWheelResize Checked%EnableWheelResize%, 允许滚轮调节大小
 
-    Gui, MainSettings: Add, Text, x30 y245 cWhite w100, 全局显示隐藏热键:
+    Gui, MainSettings: Add, Text, x30 y245 c%G_FontColor% w100, 全局显示隐藏热键:
     Gui, MainSettings: Add, Edit, x140 y240 w80 h25 vGUI_ToggleHotkey cBlack, %ToggleHotkey%
     Gui, MainSettings: Add, Checkbox, x250 y245 w150 vGUI_EnableHotkey Checked%EnableHotkey%, 启用全局热键
 
     Gui, MainSettings: Add, Checkbox, x30 y285 w150 vGUI_ShowTrayIcon Checked%ShowTrayIcon%, 显示系统托盘图标
-
-    ; 新增 X/Y 坐标设置
-    Gui, MainSettings: Add, Text, x200 y285 cWhite w60, X 坐标:
+    Gui, MainSettings: Add, Text, x200 y285 c%G_FontColor% w60, X 坐标:
     Gui, MainSettings: Add, Edit, x260 y280 w60 h25 vGUI_X2 cBlack, %GUI_X%
-    Gui, MainSettings: Add, Text, x340 y285 cWhite w60, Y 坐标:
+    Gui, MainSettings: Add, Text, x340 y285 c%G_FontColor% w60, Y 坐标:
     Gui, MainSettings: Add, Edit, x400 y280 w60 h25 vGUI_Y2 cBlack, %GUI_Y%
+
+    ; 【新增】主题配色切换配置项
+    Gui, MainSettings: Add, Text, x30 y325 c%G_FontColor% w80, 全局主题模式:
+    ThemeStr := (ThemeMode="Light" ? "Dark|Light||Custom" : (ThemeMode="Custom" ? "Dark|Light|Custom||" : "Dark||Light|Custom"))
+    Gui, MainSettings: Add, DropDownList, x120 y320 w100 vGUI_ThemeModeChoice, %ThemeStr%
 
     ; --------------------------------------------------
     ; Tab 2: 行为与隐藏
     ; --------------------------------------------------
     Gui, MainSettings: Tab, 2
-    ; 【修复对齐】加宽了 Checkbox 的 w 宽度防止截断，重新排列 x 坐标
     Gui, MainSettings: Add, Checkbox, x30 y85 w120 vGUI_IsAlwaysOnTop Checked%IsAlwaysOnTop%, 强制置顶显示
     Gui, MainSettings: Add, Checkbox, x160 y85 w135 vGUI_IsLocked Checked%IsLocked%, 固定位置禁止拖拽
     Gui, MainSettings: Add, Checkbox, x305 y85 w135 vGUI_HideInFullScreen Checked%HideInFullScreen%, 全屏时自动隐藏
@@ -2999,11 +3122,11 @@ ShowMainSettingsGUI:
     Gui, MainSettings: Add, Checkbox, x160 y125 w135 vGUI_SaveSize Checked%SaveSize%, 退出时保存大小
     Gui, MainSettings: Add, Checkbox, x305 y125 w135 vGUI_EnableEdgeHide Checked%EnableEdgeHide%, 开启贴边自动隐藏
 
-    Gui, MainSettings: Add, Text, x30 y175 cWhite w100, 边缘吸附感应距离:
+    Gui, MainSettings: Add, Text, x30 y175 c%G_FontColor% w100, 边缘吸附感应距离:
     Gui, MainSettings: Add, Edit, x150 y170 w80 h25 vGUI_SnapRange cBlack, %SnapRange%
-    Gui, MainSettings: Add, Text, x30 y215 cWhite w100, 贴边隐藏露出宽度:
+    Gui, MainSettings: Add, Text, x30 y215 c%G_FontColor% w100, 贴边隐藏露出宽度:
     Gui, MainSettings: Add, Edit, x150 y210 w80 h25 vGUI_HideMargin cBlack, %HideMargin%
-    Gui, MainSettings: Add, Text, x270 y215 cWhite w120, 贴边后多久开始隐藏:
+    Gui, MainSettings: Add, Text, x270 y215 c%G_FontColor% w120, 贴边后多久开始隐藏:
     Gui, MainSettings: Add, Edit, x400 y210 w80 h25 vGUI_HideDelay cBlack, %HideDelay%
 
     ; --------------------------------------------------
@@ -3012,52 +3135,52 @@ ShowMainSettingsGUI:
     Gui, MainSettings: Tab, 3
     Gui, MainSettings: Add, Checkbox, x30 y85 w150 vGUI_EnableDynamicOpacity Checked%EnableDynamicOpacity%, 开启动态透明度调整
 
-    Gui, MainSettings: Add, Text, x30 y125 cWhite w100, 鼠标离开基础透明:
+    Gui, MainSettings: Add, Text, x30 y125 c%G_FontColor% w100, 鼠标离开基础透明:
     Gui, MainSettings: Add, Edit, x150 y120 w80 h25 vGUI_MinOpacity cBlack, %MinOpacity%
-    Gui, MainSettings: Add, Text, x270 y125 cWhite w100, 鼠标进入最高透明:
+    Gui, MainSettings: Add, Text, x270 y125 c%G_FontColor% w100, 鼠标进入最高透明:
     Gui, MainSettings: Add, Edit, x380 y120 w80 h25 vGUI_MaxOpacity cBlack, %MaxOpacity%
 
-    Gui, MainSettings: Add, Text, x30 y165 cWhite w100, 贴边隐藏后透明度:
+    Gui, MainSettings: Add, Text, x30 y165 c%G_FontColor% w100, 贴边隐藏后透明度:
     Gui, MainSettings: Add, Edit, x150 y160 w80 h25 vGUI_hideOpacity cBlack, %hideOpacity%
 
-    Gui, MainSettings: Add, Text, x30 y205 cWhite w120, 鼠标离开后渐变延迟:
+    Gui, MainSettings: Add, Text, x30 y205 c%G_FontColor% w120, 鼠标离开后渐变延迟:
     Gui, MainSettings: Add, Edit, x150 y200 w80 h25 vGUI_MouseLeaveDelay cBlack, %MouseLeaveDelay%
-    Gui, MainSettings: Add, Text, x270 y205 cWhite w100, 渐变步长(快慢):
+    Gui, MainSettings: Add, Text, x270 y205 c%G_FontColor% w100, 渐变步长(快慢):
     Gui, MainSettings: Add, Edit, x380 y200 w80 h25 vGUI_FadeStep cBlack, %FadeStep%
 
     ; --------------------------------------------------
-    ; Tab 4: 时间模式 (新增API拾色器和字体选择)
+    ; Tab 4: 时间模式
     ; --------------------------------------------------
     Gui, MainSettings: Tab, 4
-    Gui, MainSettings: Add, Text, x30 y85 cWhite w70, 时间格式:
+    Gui, MainSettings: Add, Text, x30 y85 c%G_FontColor% w70, 时间格式:
     Gui, MainSettings: Add, Edit, x100 y80 w160 h25 vGUI_TimeFormat cBlack, %TimeFormat%
 
-    Gui, MainSettings: Add, Text, x280 y85 cWhite w70, 字体名称:
+    Gui, MainSettings: Add, Text, x280 y85 c%G_FontColor% w70, 字体名称:
     Gui, MainSettings: Add, Edit, x350 y80 w100 h25 vGUI_TimeFont cBlack, %TimeFont%
     Gui, MainSettings: Add, Button, x455 y79 w30 h27 gPickFont, 🔠
 
-    Gui, MainSettings: Add, Text, x30 y125 cWhite w70, 字体颜色:
+    Gui, MainSettings: Add, Text, x30 y125 c%G_FontColor% w70, 字体颜色:
     Gui, MainSettings: Add, Edit, x100 y120 w80 h25 vGUI_TimeColor cBlack, %TimeColor%
     Gui, MainSettings: Add, Button, x185 y119 w30 h27 gPickTimeColor, 🎨
 
-    Gui, MainSettings: Add, Text, x240 y125 cWhite w70, 字体大小比:
+    Gui, MainSettings: Add, Text, x240 y125 c%G_FontColor% w70, 字体大小比:
     Gui, MainSettings: Add, Edit, x310 y120 w50 h25 vGUI_TimeFontRatio cBlack, %TimeFontRatio%
-    Gui, MainSettings: Add, Text, x380 y125 cWhite w60, Y轴微调:
+    Gui, MainSettings: Add, Text, x380 y125 c%G_FontColor% w60, Y轴微调:
     Gui, MainSettings: Add, Edit, x440 y120 w50 h25 vGUI_TimeOffsetY cBlack, %TimeOffsetY%
 
     Gui, MainSettings: Add, Checkbox, x30 y165 w100 vGUI_TimeFontBold Checked%TimeFontBold%, 文字加粗显示
     Gui, MainSettings: Add, Checkbox, x150 y165 w120 vGUI_EnableTimeBg Checked%EnableTimeBg%, 显示背景包裹框
 
-    Gui, MainSettings: Add, Text, x30 y205 cWhite w70, 背景颜色:
+    Gui, MainSettings: Add, Text, x30 y205 c%G_FontColor% w70, 背景颜色:
     Gui, MainSettings: Add, Edit, x100 y200 w80 h25 vGUI_TimeBgColor cBlack, %TimeBgColor%
     Gui, MainSettings: Add, Button, x185 y199 w30 h27 gPickBgColor, 🎨
 
-    Gui, MainSettings: Add, Text, x240 y205 cWhite w70, 圆角比例:
+    Gui, MainSettings: Add, Text, x240 y205 c%G_FontColor% w70, 圆角比例:
     Gui, MainSettings: Add, Edit, x310 y200 w50 h25 vGUI_TimeCornerRatio cBlack, %TimeCornerRatio%
 
-    Gui, MainSettings: Add, Text, x30 y245 cWhite w70, X轴留白:
+    Gui, MainSettings: Add, Text, x30 y245 c%G_FontColor% w70, X轴留白:
     Gui, MainSettings: Add, Edit, x100 y240 w50 h25 vGUI_TimePaddingX cBlack, %TimePaddingX%
-    Gui, MainSettings: Add, Text, x170 y245 cWhite w70, Y轴留白:
+    Gui, MainSettings: Add, Text, x170 y245 c%G_FontColor% w70, Y轴留白:
     Gui, MainSettings: Add, Edit, x240 y240 w50 h25 vGUI_TimePaddingY cBlack, %TimePaddingY%
 
     ; --------------------------------------------------
@@ -3067,48 +3190,83 @@ ShowMainSettingsGUI:
     Gui, MainSettings: Add, Checkbox, x30 y85 w120 vGUI_ShowCloseButton Checked%ShowCloseButton%, 显示关闭按钮
 
     CloseActionStr := (CloseBtnAction="1" ? "退出程序|隐藏悬浮球||" : "退出程序||隐藏悬浮球")
-    Gui, MainSettings: Add, Text, x170 y85 cWhite w80, 按钮左键动作:
+    Gui, MainSettings: Add, Text, x170 y85 c%G_FontColor% w80, 按钮左键动作:
     Gui, MainSettings: Add, DropDownList, x250 y80 w120 vGUI_CloseBtnActionChoice, %CloseActionStr%
 
-    Gui, MainSettings: Add, Text, x30 y125 cWhite w90, 关闭按钮 X偏移:
+    Gui, MainSettings: Add, Text, x30 y125 c%G_FontColor% w90, 关闭按钮 X偏移:
     Gui, MainSettings: Add, Edit, x120 y120 w50 h25 vGUI_CloseBtn_X cBlack, %CloseBtn_X%
-    Gui, MainSettings: Add, Text, x190 y125 cWhite w90, 关闭按钮 Y偏移:
+    Gui, MainSettings: Add, Text, x190 y125 c%G_FontColor% w90, 关闭按钮 Y偏移:
     Gui, MainSettings: Add, Edit, x280 y120 w50 h25 vGUI_CloseBtn_Y cBlack, %CloseBtn_Y%
-    Gui, MainSettings: Add, Text, x350 y125 cWhite w90, 按钮消失延迟:
+    Gui, MainSettings: Add, Text, x350 y125 c%G_FontColor% w90, 按钮消失延迟:
     Gui, MainSettings: Add, Edit, x440 y120 w50 h25 vGUI_CloseBtn_HideTime cBlack, %CloseBtn_HideTime%
 
-    Gui, MainSettings: Add, Text, x30 y165 cWhite w90, 关闭按钮 大小:
+    Gui, MainSettings: Add, Text, x30 y165 c%G_FontColor% w90, 关闭按钮 大小:
     Gui, MainSettings: Add, Edit, x120 y160 w50 h25 vGUI_CloseBtn_Size cBlack, %CloseBtn_Size%
-    Gui, MainSettings: Add, Text, x190 y165 cWhite w90, 叉号线条粗细:
+    Gui, MainSettings: Add, Text, x190 y165 c%G_FontColor% w90, 叉号线条粗细:
     Gui, MainSettings: Add, Edit, x280 y160 w50 h25 vGUI_CloseBtn_Thickness cBlack, %CloseBtn_Thickness%
-    Gui, MainSettings: Add, Text, x350 y165 cWhite w90, 叉号视觉边距:
+    Gui, MainSettings: Add, Text, x350 y165 c%G_FontColor% w90, 叉号视觉边距:
     Gui, MainSettings: Add, Edit, x440 y160 w50 h25 vGUI_CloseBtn_VisualMargin cBlack, %CloseBtn_VisualMargin%
 
     ; --------------------------------------------------
-    ; Tab 6: 配置管理与备份 (补充遗漏的设置项)
+    ; Tab 6: 配置管理与备份
     ; --------------------------------------------------
     Gui, MainSettings: Tab, 6
     Gui, MainSettings: Add, Text, x30 y85 c00CCFF w500, --- 占位符与内容获取设定 ---
 
-    Gui, MainSettings: Add, Text, x30 y120 cWhite w130, 获取选中内容快捷键:
+    Gui, MainSettings: Add, Text, x30 y120 c%G_FontColor% w130, 获取选中内容快捷键:
     Gui, MainSettings: Add, Edit, x165 y115 w80 h25 vGUI_SelectedCopyKey cBlack, %SelectedCopyKey%
 
-    Gui, MainSettings: Add, Text, x270 y120 cWhite w130, 复制获取等待秒数:
+    Gui, MainSettings: Add, Text, x270 y120 c%G_FontColor% w130, 复制获取等待秒数:
     Gui, MainSettings: Add, Edit, x390 y115 w50 h25 vGUI_SelectedWaitTime cBlack, %SelectedWaitTime%
 
-    Gui, MainSettings: Add, Text, x30 y160 cWhite w130, 最多保留落地文件数:
+    Gui, MainSettings: Add, Text, x30 y160 c%G_FontColor% w130, 最多保留落地文件数:
     Gui, MainSettings: Add, Edit, x165 y155 w80 h25 vGUI_MaxTempFiles cBlack, %MaxTempFiles%
 
     Gui, MainSettings: Add, Text, x30 y205 c00CCFF w500, --- 配置备份与管理 ---
-    Gui, MainSettings: Add, Text, x30 y240 cWhite w100, 配置文件目录:
+    Gui, MainSettings: Add, Text, x30 y240 c%G_FontColor% w100, 配置文件目录:
     Gui, MainSettings: Add, Edit, x130 y235 w320 h25 vGUI_CfgMgr_UserConfigDir cBlack, %CfgMgr_UserConfigDir%
     Gui, MainSettings: Add, Button, x455 y234 w40 h27 gPickConfigDir, 📂
 
     Gui, MainSettings: Add, Checkbox, x30 y285 w120 vGUI_CfgMgr_EnableAutoBackup Checked%CfgMgr_EnableAutoBackup%, 开启自动备份
-    Gui, MainSettings: Add, Text, x160 y285 cWhite w120, 最大保留备份数量:
+    Gui, MainSettings: Add, Text, x160 y285 c%G_FontColor% w120, 最大保留备份数量:
     Gui, MainSettings: Add, Edit, x280 y280 w60 h25 vGUI_CfgMgr_MaxBackupCount cBlack, %CfgMgr_MaxBackupCount%
 
-; --------------------------------------------------
+    ; --------------------------------------------------
+    ; 【新增】Tab 7: 悬停面板
+    ; --------------------------------------------------
+    Gui, MainSettings: Tab, 7
+    Gui, MainSettings: Add, Checkbox, x30 y85 w120 vGUI_HoverPanel_Enable Checked%HoverPanel_Enable%, 启用悬停面板
+    Gui, MainSettings: Add, Checkbox, x160 y85 w160 vGUI_HoverPanel_ShowTooltip Checked%HoverPanel_ShowTooltip%, 悬停时显示项目详细提示
+
+    Gui, MainSettings: Add, Text, x30 y125 c%G_FontColor% w90, 触发显示延迟:
+    Gui, MainSettings: Add, Edit, x120 y120 w60 h25 vGUI_HoverPanel_ShowDelay cBlack, %HoverPanel_ShowDelay%
+    Gui, MainSettings: Add, Text, x200 y125 c%G_FontColor% w90, 离开隐藏延迟:
+    Gui, MainSettings: Add, Edit, x290 y120 w60 h25 vGUI_HoverPanel_HideDelay cBlack, %HoverPanel_HideDelay%
+    Gui, MainSettings: Add, Text, x370 y125 c%G_FontColor% w90, 提示显示延迟:
+    Gui, MainSettings: Add, Edit, x460 y120 w60 h25 vGUI_HoverPanel_TooltipDelay cBlack, %HoverPanel_TooltipDelay%
+
+    Gui, MainSettings: Add, Text, x30 y165 c%G_FontColor% w90, 项目行高间距:
+    Gui, MainSettings: Add, Edit, x120 y160 w60 h25 vGUI_HoverPanel_ItemHeight cBlack, %HoverPanel_ItemHeight%
+    Gui, MainSettings: Add, Text, x200 y165 c%G_FontColor% w90, 单个项目宽度:
+    Gui, MainSettings: Add, Edit, x290 y160 w60 h25 vGUI_HoverPanel_ItemWidth cBlack, %HoverPanel_ItemWidth%
+    Gui, MainSettings: Add, Text, x370 y165 c%G_FontColor% w90, 面板全局边距:
+    Gui, MainSettings: Add, Edit, x460 y160 w60 h25 vGUI_HoverPanel_Margin cBlack, %HoverPanel_Margin%
+
+    Gui, MainSettings: Add, Text, x30 y205 c%G_FontColor% w90, 图标显示尺寸:
+    Gui, MainSettings: Add, Edit, x120 y200 w60 h25 vGUI_HoverPanel_IconSize cBlack, %HoverPanel_IconSize%
+    Gui, MainSettings: Add, Text, x200 y205 c%G_FontColor% w90, 菜单文字大小:
+    Gui, MainSettings: Add, Edit, x290 y200 w60 h25 vGUI_HoverPanel_FontSize cBlack, %HoverPanel_FontSize%
+    Gui, MainSettings: Add, Text, x370 y205 c%G_FontColor% w90, 文字垂直偏移:
+    Gui, MainSettings: Add, Edit, x460 y200 w60 h25 vGUI_HoverPanel_TextOffsetY cBlack, %HoverPanel_TextOffsetY%
+
+    Gui, MainSettings: Add, Checkbox, x30 y245 w140 vGUI_HoverPanel_EnableHoverHighlight Checked%HoverPanel_EnableHoverHighlight%, 启用项目高亮背景
+    Gui, MainSettings: Add, Text, x200 y245 c%G_FontColor% w90, 高亮背景圆角:
+    Gui, MainSettings: Add, Edit, x290 y240 w60 h25 vGUI_HoverPanel_HoverCornerRadius cBlack, %HoverPanel_HoverCornerRadius%
+    Gui, MainSettings: Add, Text, x370 y245 c%G_FontColor% w90, 菜单项字体名:
+    Gui, MainSettings: Add, Edit, x460 y240 w60 h25 vGUI_HoverPanel_FontName cBlack, %HoverPanel_FontName%
+    Gui, MainSettings: Add, Text, x30 y285 c00CCFF w500, 注: 悬停面板的颜色已绑定「全局主题模式」，更改主题即可同步配色。
+
+    ; --------------------------------------------------
     ; 底部按钮区域
     ; --------------------------------------------------
     Gui, MainSettings: Tab
@@ -3214,8 +3372,8 @@ CoreSaveMainSettings:
     Gui, MainSettings: Submit, NoHide
 
     ; 1. 复选框状态转换 (获取界面上的 1/0)
-    v_AdminLaunch := GUI_AdminLaunch ? "1" : "0"    ; 【新增】
-    v_AutoRun := GUI_AutoRun ? "1" : "0"            ; 【新增】
+    v_AdminLaunch := GUI_AdminLaunch ? "1" : "0"
+    v_AutoRun := GUI_AutoRun ? "1" : "0"
     v_ShowTrayIcon := GUI_ShowTrayIcon ? "1" : "0"
     v_EnableWheelResize := GUI_EnableWheelResize ? "1" : "0"
     v_EnableHotkey := GUI_EnableHotkey ? "1" : "0"
@@ -3231,8 +3389,14 @@ CoreSaveMainSettings:
     v_ShowCloseButton := GUI_ShowCloseButton ? "1" : "0"
     v_CfgMgr_EnableAutoBackup := GUI_CfgMgr_EnableAutoBackup ? "1" : "0"
 
+    ; 【新增】悬停面板的复选框转义
+    v_HoverPanel_Enable := GUI_HoverPanel_Enable ? "1" : "0"
+    v_HoverPanel_ShowTooltip := GUI_HoverPanel_ShowTooltip ? "1" : "0"
+    v_HoverPanel_EnableHoverHighlight := GUI_HoverPanel_EnableHoverHighlight ? "1" : "0"
+
     ; 2. 下拉框处理
     v_CloseBtnAction := (GUI_CloseBtnActionChoice = "退出程序") ? "0" : "1"
+    v_ThemeMode := GUI_ThemeModeChoice ; 【新增】主题模式状态获取
 
     ; 3. 处理特殊格式
     v_TimeFormat := StrReplace(GUI_TimeFormat, "`n", "\n")
@@ -3241,8 +3405,8 @@ CoreSaveMainSettings:
     section := "基础配置"
 
     ; --- 写入基础配置 (INI 文件) ---
-    Var_Set(v_AdminLaunch, "0", "AdminLaunch", section, iniPath) ; 【新增】
-    Var_Set(v_AutoRun, "0", "AutoRun", section, iniPath)         ; 【新增】
+    Var_Set(v_AdminLaunch, "0", "AdminLaunch", section, iniPath)
+    Var_Set(v_AutoRun, "0", "AutoRun", section, iniPath)
     Var_Set(GUI_BallSize, "50", "BallSize", section, iniPath)
     Var_Set(GUI_minBallSize, "20", "minBallSize", section, iniPath)
     Var_Set(GUI_maxBallSize, "300", "maxBallSize", section, iniPath)
@@ -3251,7 +3415,6 @@ CoreSaveMainSettings:
     Var_Set(v_ShowTrayIcon, "1", "ShowTrayIcon", section, iniPath)
     Var_Set(v_EnableWheelResize, "1", "EnableWheelResize", section, iniPath)
     Var_Set(v_EnableHotkey, "1", "EnableHotkey", section, iniPath)
-
 
     Var_Set(v_IsAlwaysOnTop, "1", "IsAlwaysOnTop", section, iniPath)
     Var_Set(v_IsLocked, "0", "IsLocked", section, iniPath)
@@ -3295,25 +3458,45 @@ CoreSaveMainSettings:
     Var_Set(GUI_SelectedWaitTime, "0.15", "SelectedWaitTime", section, iniPath)
     Var_Set(GUI_MaxTempFiles, "10", "MaxTempFiles", section, iniPath)
 
-If (SavePosition = "0") {
-    Var_Set(GUI_X2, "", "GUI_X", section, iniPath)
-    Var_Set(GUI_Y2, "", "GUI_Y", section, iniPath)
-}
-
     Var_Set(GUI_CfgMgr_UserConfigDir, A_ScriptDir "\UserConfig", "UserConfigDir", "基础配置", iniPath)
     Var_Set(v_CfgMgr_EnableAutoBackup, "1", "EnableAutoBackup", "基础配置", iniPath)
     Var_Set(GUI_CfgMgr_MaxBackupCount, "10", "MaxBackupCount", "基础配置", iniPath)
+
+    ; 【新增】主题设置写入
+    Var_Set(v_ThemeMode, "Dark", "ThemeMode", "主题配置", iniPath)
+
+    ; 【新增】悬停面板设置写入
+    Var_Set(v_HoverPanel_Enable, "1", "Enable", "悬停面板", iniPath)
+    Var_Set(GUI_HoverPanel_ShowDelay, "350", "ShowDelay", "悬停面板", iniPath)
+    Var_Set(GUI_HoverPanel_HideDelay, "200", "HideDelay", "悬停面板", iniPath)
+    Var_Set(GUI_HoverPanel_ItemHeight, "30", "ItemHeight", "悬停面板", iniPath)
+    Var_Set(GUI_HoverPanel_ItemWidth, "155", "ItemWidth", "悬停面板", iniPath)
+    Var_Set(GUI_HoverPanel_Margin, "8", "Margin", "悬停面板", iniPath)
+    Var_Set(GUI_HoverPanel_IconSize, "24", "IconSize", "悬停面板", iniPath)
+    Var_Set(GUI_HoverPanel_FontSize, "10", "FontSize", "悬停面板", iniPath)
+    Var_Set(GUI_HoverPanel_TextOffsetY, "-6", "TextOffsetY", "悬停面板", iniPath)
+    Var_Set(v_HoverPanel_EnableHoverHighlight, "1", "EnableHoverHighlight", "悬停面板", iniPath)
+    Var_Set(GUI_HoverPanel_HoverCornerRadius, "5", "HoverCornerRadius", "悬停面板", iniPath)
+    Var_Set(GUI_HoverPanel_FontName, "微软雅黑", "FontName", "悬停面板", iniPath)
+    Var_Set(v_HoverPanel_ShowTooltip, "1", "ShowTooltip", "悬停面板", iniPath)
+    Var_Set(GUI_HoverPanel_TooltipDelay, "600", "TooltipDelay", "悬停面板", iniPath)
 
     ; ==============================================================================
     ; 【核心新增】：将所有修改同步到内存全局变量，并即时重绘，使配置立即生效
     ; ==============================================================================
     global ToggleHotkey, EnableHotkey, ShowTrayIcon, BallSize, minBallSize, maxBallSize, BallSizeIncrement, EnableWheelResize
-    global AdminLaunch, AutoRun ; 【新增全局声明】
+    global AdminLaunch, AutoRun
     global IsAlwaysOnTop, IsLocked, HideInFullScreen, SavePosition, SaveSize, EnableEdgeHide, SnapRange, HideMargin, HideDelay
     global EnableDynamicOpacity, MinOpacity, MaxOpacity, hideOpacity, MouseLeaveDelay, FadeStep, CurrentAlpha
     global TimeFormat, TimeFont, TimeColor, TimeFontRatio, TimeOffsetY, TimeFontBold, EnableTimeBg, TimeBgColor, TimeCornerRatio, TimePaddingX, TimePaddingY
     global ShowCloseButton, CloseBtnAction, CloseBtn_X, CloseBtn_Y, CloseBtn_HideTime, CloseBtn_Size, CloseBtn_Thickness, CloseBtn_VisualMargin
     global SelectedCopyKey, SelectedWaitTime, MaxTempFiles, CfgMgr_UserConfigDir, CfgMgr_EnableAutoBackup, CfgMgr_MaxBackupCount
+
+    ; 【新增全局声明】：主题配置与悬停面板
+    global ThemeMode
+    global HoverPanel_Enable, HoverPanel_ShowDelay, HoverPanel_HideDelay, HoverPanel_ItemHeight, HoverPanel_ItemWidth, HoverPanel_Margin
+    global HoverPanel_IconSize, HoverPanel_FontSize, HoverPanel_TextOffsetY, HoverPanel_EnableHoverHighlight, HoverPanel_HoverCornerRadius
+    global HoverPanel_FontName, HoverPanel_ShowTooltip, HoverPanel_TooltipDelay
 
     ; 1. 动态刷新快捷键状态
     if (ToggleHotkey != GUI_ToggleHotkey && ToggleHotkey != "")
@@ -3335,8 +3518,8 @@ If (SavePosition = "0") {
         Menu, Tray, NoIcon
 
     ; 3. 同步全部内存变量
-    AdminLaunch := v_AdminLaunch            ; 【新增】
-    AutoRun := v_AutoRun                    ; 【新增】
+    AdminLaunch := v_AdminLaunch
+    AutoRun := v_AutoRun
     Label_AutoRun(AutoRun)                  ; 【新增：立即触发开机自启逻辑】
     BallSize := GUI_BallSize, minBallSize := GUI_minBallSize, maxBallSize := GUI_maxBallSize
     BallSizeIncrement := GUI_BallSizeIncrement, EnableWheelResize := v_EnableWheelResize
@@ -3355,6 +3538,20 @@ If (SavePosition = "0") {
     SelectedCopyKey := GUI_SelectedCopyKey, SelectedWaitTime := GUI_SelectedWaitTime, MaxTempFiles := GUI_MaxTempFiles
     CfgMgr_UserConfigDir := GUI_CfgMgr_UserConfigDir, CfgMgr_EnableAutoBackup := v_CfgMgr_EnableAutoBackup, CfgMgr_MaxBackupCount := GUI_CfgMgr_MaxBackupCount
 
+    ; 【新增：同步主题设置并立即重新加载色彩】
+    ThemeMode := v_ThemeMode
+    GoSub, LoadThemeConfig
+
+    ; 【新增：同步悬停面板设置】
+    HoverPanel_Enable := v_HoverPanel_Enable
+    HoverPanel_ShowDelay := GUI_HoverPanel_ShowDelay, HoverPanel_HideDelay := GUI_HoverPanel_HideDelay
+    HoverPanel_ItemHeight := GUI_HoverPanel_ItemHeight, HoverPanel_ItemWidth := GUI_HoverPanel_ItemWidth
+    HoverPanel_Margin := GUI_HoverPanel_Margin, HoverPanel_IconSize := GUI_HoverPanel_IconSize
+    HoverPanel_FontSize := GUI_HoverPanel_FontSize, HoverPanel_TextOffsetY := GUI_HoverPanel_TextOffsetY
+    HoverPanel_EnableHoverHighlight := v_HoverPanel_EnableHoverHighlight, HoverPanel_HoverCornerRadius := GUI_HoverPanel_HoverCornerRadius
+    HoverPanel_FontName := GUI_HoverPanel_FontName, HoverPanel_ShowTooltip := v_HoverPanel_ShowTooltip
+    HoverPanel_TooltipDelay := GUI_HoverPanel_TooltipDelay
+
     ; 4. 立即生效窗口置顶属性
     WinSet, AlwaysOnTop, % (IsAlwaysOnTop = "1" ? "On" : "Off"), ahk_id %hBall%
 
@@ -3367,8 +3564,17 @@ If (SavePosition = "0") {
     UpdateBallDisplay(hBall, pBitmap, targetX, targetY, BallSize, CurrentAlpha)
     UpdateCloseBtnDisplay(hCloseBtn, CloseBtn_Size, CloseBtn_Thickness, CloseBtn_VisualMargin, false, CurrentAlpha)
 
+    If (SavePosition = "0") {
+        Var_Set(GUI_X2, "", "GUI_X", section, iniPath)
+        Var_Set(GUI_Y2, "", "GUI_Y", section, iniPath)
+    }
+
     ; 6. 重新执行吸附边缘判定防越界
     GoSub, HandleSnapping
+
+    ; 【新增】如果悬停面板处于展示状态，则进行原地重绘使设置立即生效
+    if (HoverPanelVisible)
+        RenderHoverPanel(CurrentHoverGroup, true)
 return
 
 CancelMainSettings:
@@ -3384,7 +3590,7 @@ Label_AutoRun(Auto_Launch:="0"){
     ; 使用 A_ScriptFullPath 兼容编译(.exe)与未编译(.ahk)环境
     RegRead, Auto_Launch_reg, HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run, Floatyball
     Auto_Launch_reg := (Auto_Launch_reg = A_ScriptFullPath) ? 1 : 0
-    
+
     If(Auto_Launch != Auto_Launch_reg){
         If(Auto_Launch){
             RegWrite, REG_SZ, HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run, Floatyball, %A_ScriptFullPath%
@@ -3408,19 +3614,19 @@ ShowAboutGUI:
 
     ; 创建可调节大小的窗口 (+Resize)
     Gui, AboutGui: New, +HwndhAboutGui +Resize +MaximizeBox
-    Gui, AboutGui: Color, 2B2B2B
+    Gui, AboutGui: Color, %G_BgColor%
     Gui, AboutGui: Margin, 20, 20
 
     ; 标题
-    Gui, AboutGui: Font, s14 cWhite w700, 微软雅黑
+    Gui, AboutGui: Font, s14 c%G_FontColor% w700, 微软雅黑
     Gui, AboutGui: Add, Text, w360 Center vAboutTitle, Floatyball 悬浮球
 
     ; 简介文本
-    Gui, AboutGui: Font, s10 cAAAAAA w400
+    Gui, AboutGui: Font, s10 c%G_SubFontColor% w400
     Gui, AboutGui: Add, Text, y+15 w360 vAboutDesc, 📝 简介：一款高度可自定义的多功能悬浮工具，支持动作快捷触发、文件多重拖放与动态时间显示。
 
     ; 作者与版本信息
-    Gui, AboutGui: Font, s10 cWhite w400
+    Gui, AboutGui: Font, s10 c%G_FontColor% w400
     Gui, AboutGui: Add, Text, y+20 w360 vAboutAuthor, 👤 作者：逍遥
     Gui, AboutGui: Add, Text, y+10 w360 vAboutVersion, 🏷️ 版本：%当前工具版本%
 
@@ -3442,9 +3648,9 @@ AboutGuiGuiSize:
 
     ; 动态计算内部控件宽度 (总宽减去左右边距 20*2 = 40)
     NewAboutW := A_GuiWidth - 40
-    
+
     ; 给个最小宽度保护，防止把窗口缩得太小导致排版崩溃
-    if (NewAboutW < 200) 
+    if (NewAboutW < 200)
         NewAboutW := 200
 
     ; 移动并拉伸控件
@@ -3463,3 +3669,1778 @@ AboutGuiGuiClose:
 AboutGuiGuiEscape:
     Gui, AboutGui: Destroy
 return
+
+; ==============================================================================
+; 新增：悬停面板核心功能与 GUI 渲染
+; ==============================================================================
+
+LoadHoverItems() {
+    global HoverGroups, HoverItemsData, CurrentHoverGroup
+    global pDropTarget
+    HoverGroups := []
+    HoverItemsData := []
+    cfgPath := A_ScriptDir "\HoverItems.txt"
+
+    if !FileExist(cfgPath) {
+        defaultTxt =
+        (LTrim
+            ; ============================================================
+            ; 悬停面板配置说明 (一行一个动作)
+            ; 格式：图标(可纯文本或文件路径)|文字|分组名|功能类型|功能参数|备注
+            ; ============================================================
+        )
+        FileAppend, %defaultTxt%, %cfgPath%, UTF-8
+    }
+
+    FileRead, txt, *t %cfgPath%
+    Loop, Parse, txt, `n, `r
+    {
+        if (Trim(A_LoopField) = "" || SubStr(Trim(A_LoopField), 1, 1) = ";")
+            continue
+
+        parts := StrSplit(A_LoopField, "|")
+        if (parts.MaxIndex() >= 5) {
+            ; 【修改】：在此处执行反转义还原真实内容
+            icon := UnescapeHoverData(Trim(parts[1]))
+            text := UnescapeHoverData(Trim(parts[2]))
+            group := UnescapeHoverData(Trim(parts[3]))
+            type := Trim(parts[4])
+            param := UnescapeHoverData(Trim(parts[5]))
+            remark := UnescapeHoverData(Trim(parts[6]))
+
+            if (group = "")
+                group := "默认"
+
+            groupExists := false
+            for k, v in HoverGroups {
+                if (v = group)
+                    groupExists := true
+            }
+            if (!groupExists)
+                HoverGroups.Push(group)
+
+            HoverItemsData.Push({Icon: icon, Text: text, Group: group, Type: type, Param: param, Remark: remark, LineStr: A_LoopField})
+        }
+    }
+    if (HoverGroups.MaxIndex() > 0 && CurrentHoverGroup = "")
+        CurrentHoverGroup := HoverGroups[1]
+}
+
+ShowHoverPanelGUI:
+    RenderHoverPanel(CurrentHoverGroup)
+return
+
+RenderHoverPanel(TargetGroup := "", ForceRebuild := false) {
+    global
+    if (TargetGroup != "")
+        CurrentHoverGroup := TargetGroup
+
+    ; 核心：判断悬停面板是否已经存在
+    GuiExists := WinExist("ahk_id " hHoverPanel)
+
+    ; ▼▼▼ 新增修复：如果要求强制重建（如拖拽排序分组后），先记录坐标并销毁旧面板 ▼▼▼
+    if (ForceRebuild && GuiExists) {
+        WinGetPos, savedPX, savedPY,,, ahk_id %hHoverPanel%
+        DllCall("ole32\RevokeDragDrop", "Ptr", hHoverPanel) ; <--- 【新增注销】
+        Gui, HoverPanel: Destroy
+        GuiExists := false
+        HoverPanelVisible := false
+    } else {
+        savedPX := "", savedPY := ""
+    }
+    ; ▲▲▲ ==================================================================== ▲▲▲
+
+    if (!GuiExists) {
+        ; ==============================================================
+        ; 【阶段一：初次创建】如果不存在，则全新构建整个 UI 框架
+        ; ==============================================================
+        Gui, HoverPanel: Destroy
+        Gui, HoverPanel: Default
+        Gui, HoverPanel: +HwndhHoverPanel -Caption +AlwaysOnTop +ToolWindow +E0x08000000
+
+        DllCall("ole32\RegisterDragDrop", "Ptr", hHoverPanel, "Ptr", pDropTarget) ; <--- 【新增注册：复用悬浮球的底层拖拽器】
+
+        Gui, HoverPanel: Color, %HoverPanel_BgColor%
+        Gui, HoverPanel: Margin, %HoverPanel_Margin%, %HoverPanel_Margin%
+
+        ; --- 1. 一次性创建所有顶部栏按钮 (通过隐藏/显示来切换，避免销毁) ---
+        Gui, HoverPanel: Font, s10 cFF5555 w700, 微软雅黑
+        Gui, HoverPanel: Add, Text, % "x" HoverPanel_Margin " y8 w150 BackgroundTrans vHP_Edit_Tip", ⚠️点击多选
+
+        DragWidth := HoverPanel_Width - 120
+        Gui, HoverPanel: Add, Text, x0 y0 w%DragWidth% h30 gHoverPanelDrag BackgroundTrans vHP_DragBar1,
+        DragWidthNorm := HoverPanel_Width - 60
+        Gui, HoverPanel: Add, Text, x0 y0 w%DragWidthNorm% h30 gHoverPanelDrag BackgroundTrans vHP_DragBar2,
+
+        ConfirmX := HoverPanel_Width - 90
+        Gui, HoverPanel: Font, s10 cFF5555 w700
+        Gui, HoverPanel: Add, Text, x%ConfirmX% y8 w45 Right BackgroundTrans gConfirmHoverBatchDelete vHP_Edit_Del, ✅删除
+
+        CancelX := HoverPanel_Width - 45
+        Gui, HoverPanel: Font, s10 c888888 w700
+        Gui, HoverPanel: Add, Text, x%CancelX% y8 w35 Right BackgroundTrans gExitHoverBatchDeleteMode vHP_Edit_Cancel, 取消
+
+        CloseX := HoverPanel_Width - 32
+        Gui, HoverPanel: Font, s10 c%HoverPanel_FontColor% w700
+        Gui, HoverPanel: Add, Text, x%CloseX% y8 w20 Right BackgroundTrans gCloseHoverPanel vHP_Norm_Close, ❌
+
+        PinX := HoverPanel_Width - 55
+        Gui, HoverPanel: Add, Text, x%PinX% y8 w20 Right gToggleHoverPanelPin vHP_PinBtn BackgroundTrans, 📌
+        ; --- 【新增】：右下角拖拽缩放手柄 ---
+        ; 将字体放大到 s22，颜色改为动态跟随面板文字颜色，控件大小放大到 24x24
+        Gui, HoverPanel: Font, s22 c%HoverPanel_FontColor%, 微软雅黑
+        Gui, HoverPanel: Add, Text, x0 y0 w24 h24 BackgroundTrans Center gHoverPanelResize vHP_ResizeGrip, ◢
+
+        ; 全局计数器：记录已创建的控件数量，以便对象池复用
+        MaxCreatedGroups := 0
+        MaxCreatedItems := 0
+
+        ; 占位符横线和空提示
+        Gui, HoverPanel: Font, s10 c888888, 微软雅黑
+        Gui, HoverPanel: Add, Text, x12 y0 w10 h1 0x10 vHP_Line
+        Gui, HoverPanel: Add, Text, x12 y0 w10 Center vHPEmptyText, (拖拽文件、网址、文本到此面板上快速添加)
+
+        ; 悬停高亮底色块
+        if (HoverPanel_EnableHoverHighlight = "1") {
+            Gui, HoverPanel: Add, Progress, % "x0 y0 w" HoverPanel_ItemWidth " h" HoverPanel_ItemHeight " Background" HoverPanel_HoverBgColor " Disabled vHPHighlight HwndhHPHighlight Hidden"
+            if (HoverPanel_HoverCornerRadius > 0) {
+                DPIScale := A_ScreenDPI / 96
+                SetWindowRgn(hHPHighlight, Round(HoverPanel_ItemWidth * DPIScale), Round(HoverPanel_ItemHeight * DPIScale), Round(HoverPanel_HoverCornerRadius * DPIScale))
+            }
+        }
+    } else {
+        Gui, HoverPanel: Default ; 如果已存在，将焦点切换过去，准备进行原地更新
+    }
+
+    ; ==============================================================
+    ; 【阶段二：UI 无缝刷新】通过修改现有控件属性，瞬间切换状态
+    ; ==============================================================
+
+    ; --- 同步更新右下角缩放手柄的颜色 ---
+    Gui, Font, c%HoverPanel_FontColor%, 微软雅黑
+    GuiControl, Font, HP_ResizeGrip
+
+    ; --- 1. 更新顶部栏的模式状态 ---
+    if (isHoverPanelEditMode) {
+        GuiControl, Show, HP_Edit_Tip
+        GuiControl, Show, HP_Edit_Del
+        GuiControl, Show, HP_Edit_Cancel
+        GuiControl, Show, HP_DragBar1
+        GuiControl, Hide, HP_Norm_Close
+        GuiControl, Hide, HP_PinBtn
+        GuiControl, Hide, HP_DragBar2
+    } else {
+        GuiControl, Hide, HP_Edit_Tip
+        GuiControl, Hide, HP_Edit_Del
+        GuiControl, Hide, HP_Edit_Cancel
+        GuiControl, Hide, HP_DragBar1
+        GuiControl, Show, HP_Norm_Close
+        GuiControl, Show, HP_PinBtn
+        GuiControl, Show, HP_DragBar2
+
+        pinColor := isHoverPanelPinned ? "c00FF66" : "c" HoverPanel_FontColor
+        Gui, Font, s10 w700 %pinColor%, 微软雅黑
+        GuiControl, Font, HP_PinBtn
+    }
+
+    ; 每次重新排版前，隐藏高亮块
+    if (HoverPanel_EnableHoverHighlight = "1")
+        GuiControl, Hide, HPHighlight
+
+    ; --- 2. 渲染和复用分组标签栏 ---
+    btnX := HoverPanel_Margin
+    btnY := 35
+    for idx, grp in HoverGroups {
+        isCur := (grp = CurrentHoverGroup)
+        cColor := isCur ? "c00CCFF" : "c" HoverPanel_FontColor
+
+        if (idx > MaxCreatedGroups) {
+            ; 新增分组时创建新控件
+            Gui, Font, s10 w700 %cColor%, 微软雅黑
+            Gui, Add, Text, x%btnX% y%btnY% gHoverPanelSwitchGroup vHPGrp_%idx% BackgroundTrans, %grp%
+            MaxCreatedGroups := idx
+        } else {
+            ; 核心防闪烁：直接原地改色、改字、改坐标
+            Gui, Font, s10 w700 %cColor%, 微软雅黑
+            GuiControl, Font, HPGrp_%idx%
+            GuiControl,, HPGrp_%idx%, %grp%
+            GuiControl, Move, HPGrp_%idx%, x%btnX% y%btnY%
+            GuiControl, Show, HPGrp_%idx%
+        }
+
+        GuiControlGet, pos, Pos, HPGrp_%idx%
+        ; 修改前: SafeRightBoundary := HoverPanel_Width - 12
+        SafeRightBoundary := HoverPanel_Width - HoverPanel_Margin
+        if ((posX + posW) > SafeRightBoundary) {
+            ; 修改前: btnX := 12
+            btnX := HoverPanel_Margin
+            btnY += 26
+            GuiControl, Move, HPGrp_%idx%, x%btnX% y%btnY%
+            GuiControlGet, pos, Pos, HPGrp_%idx%
+        }
+        ; 修改前: btnX += posW + 12
+        btnX += posW + HoverPanel_Margin
+    }
+    ; 删除分组时，把多余的控件藏起来而不销毁，等待下次复用
+    Loop, % MaxCreatedGroups - HoverGroups.MaxIndex() {
+        hideIdx := HoverGroups.MaxIndex() + A_Index
+        GuiControl, Hide, HPGrp_%hideIdx%
+    }
+
+    LineY := btnY + 26
+    StartY := LineY + 12
+    HP_StartY := StartY
+
+    ; 修改前: LineW := HoverPanel_Width - 24
+    LineW := HoverPanel_Width - (HoverPanel_Margin * 2)
+    ; 修改前: GuiControl, Move, HP_Line, x12 y%LineY% w%LineW% h1
+    GuiControl, Move, HP_Line, % "x" HoverPanel_Margin " y" LineY " w" LineW " h1"
+    ; 修改前: GuiControl, Move, HPEmptyText, x12 y%StartY% w%LineW%
+    GuiControl, Move, HPEmptyText, % "x" HoverPanel_Margin " y" StartY " w" LineW
+
+    ; --- 3. 渲染和复用动作项目 ---
+    ItemCount := 0
+    ; 修改前: AvailableWidth := HoverPanel_Width - 24
+    AvailableWidth := HoverPanel_Width - (HoverPanel_Margin * 2)
+    Cols := Floor(AvailableWidth / HoverPanel_ItemWidth)
+    if (Cols < 1)
+        Cols := 1
+
+    for idx, item in HoverItemsData {
+        isCurGroup := (item.Group = CurrentHoverGroup)
+
+        if (isCurGroup) {
+            CurRow := Floor(ItemCount / Cols)
+            CurCol := Mod(ItemCount, Cols)
+            ; 修改前: curX := 12 + (CurCol * HoverPanel_ItemWidth)
+            curX := HoverPanel_Margin + (CurCol * HoverPanel_ItemWidth)
+            curY := StartY + (CurRow * HoverPanel_ItemHeight)
+            item.RenderX := curX
+            item.RenderY := curY
+            ItemCount++
+        } else {
+            curX := -1000
+            curY := -1000
+        }
+
+        realIconPath := item.Icon
+        while RegExMatch(realIconPath, "i)%([^%]+)%", match) {
+            EnvGet, envVal, %match1%
+            realIconPath := StrReplace(realIconPath, match, envVal)
+        }
+
+        if (isHoverPanelEditMode && HoverPanelSelectedItems[idx])
+            fontColor := "cFF5555"
+        else
+            fontColor := "c" HoverPanel_FontColor
+
+        textW := HoverPanel_ItemWidth - HoverPanel_IconSize - 8
+        textX := curX + HoverPanel_IconSize + 8
+        textY := curY + (HoverPanel_IconSize/2) - (HoverPanel_FontSize/2) + HoverPanel_TextOffsetY
+
+        if (idx > MaxCreatedItems) {
+            ; 没有可用缓存时，新建项目控件
+            if FileExist(realIconPath) {
+                Gui, Add, Picture, x%curX% y%curY% w%HoverPanel_IconSize% h%HoverPanel_IconSize% AltSubmit gOnHoverItemClick vHPPic_%idx%, % realIconPath
+                Gui, Add, Text, x-1000 y-1000 w%HoverPanel_IconSize% h%HoverPanel_IconSize% Center gOnHoverItemClick vHPIco_%idx% BackgroundTrans,
+            } else {
+                Gui, Font, s%HoverPanel_FontSize% c%HoverPanel_FontColor% w400, %HoverPanel_FontName%
+                Gui, Add, Text, x%curX% y%curY% w%HoverPanel_IconSize% h%HoverPanel_IconSize% Center gOnHoverItemClick vHPIco_%idx% BackgroundTrans, % item.Icon
+                Gui, Add, Picture, x-1000 y-1000 w%HoverPanel_IconSize% h%HoverPanel_IconSize% AltSubmit gOnHoverItemClick vHPPic_%idx%,
+            }
+            Gui, Font, s%HoverPanel_FontSize% %fontColor% w400, %HoverPanel_FontName%
+            Gui, Add, Text, x%textX% y%textY% w%textW% h%HoverPanel_IconSize% -Wrap +0x4000 gOnHoverItemClick vHPItem_%idx% BackgroundTrans, % item.Text
+            MaxCreatedItems := idx
+        } else {
+            ; 核心防闪烁：直接原地替换图标、改写文字、更换位置
+            if FileExist(realIconPath) {
+                GuiControl,, HPPic_%idx%, % realIconPath
+                GuiControl, Move, HPPic_%idx%, x%curX% y%curY%
+                GuiControl, Move, HPIco_%idx%, x-1000 y-1000
+            } else {
+                Gui, Font, s%HoverPanel_FontSize% c%HoverPanel_FontColor% w400, %HoverPanel_FontName%
+                GuiControl, Font, HPIco_%idx%
+                GuiControl,, HPIco_%idx%, % item.Icon
+                GuiControl, Move, HPIco_%idx%, x%curX% y%curY%
+                GuiControl, Move, HPPic_%idx%, x-1000 y-1000
+            }
+            Gui, Font, s%HoverPanel_FontSize% %fontColor% w400, %HoverPanel_FontName%
+            GuiControl, Font, HPItem_%idx%
+            GuiControl,, HPItem_%idx%, % item.Text
+            GuiControl, Move, HPItem_%idx%, x%textX% y%textY%
+        }
+
+        ; 将属于当前组的项目展示，非当前组的隐藏
+        if (isCurGroup) {
+            if FileExist(realIconPath)
+                GuiControl, Show, HPPic_%idx%
+            else
+                GuiControl, Show, HPIco_%idx%
+            GuiControl, Show, HPItem_%idx%
+        } else {
+            GuiControl, Hide, HPPic_%idx%
+            GuiControl, Hide, HPIco_%idx%
+            GuiControl, Hide, HPItem_%idx%
+        }
+    }
+    ; 同样，删减项目后把多余的老控件缓存雪藏起来
+    Loop, % MaxCreatedItems - HoverItemsData.MaxIndex() {
+        hideIdx := HoverItemsData.MaxIndex() + A_Index
+        GuiControl, Hide, HPPic_%hideIdx%
+        GuiControl, Hide, HPIco_%hideIdx%
+        GuiControl, Hide, HPItem_%hideIdx%
+    }
+
+    ; --- 4. 智能高度计算 ---
+    if (ItemCount = 0) {
+        GuiControl, Show, HPEmptyText
+        GridHeight := 40
+    } else {
+        GuiControl, Hide, HPEmptyText
+        TotalRows := Floor((ItemCount - 1) / Cols) + 1
+        GridHeight := TotalRows * HoverPanel_ItemHeight
+    }
+
+    ; 计算当前内容所需的绝对最小高度 (底部再留白 15 像素防遮挡)
+    MinRequiredHeight := StartY + GridHeight + 15
+
+    ; 优先使用用户拖拽保存的高度，但绝不允许小于内容所需的最小高度
+    actualHeight := HoverPanel_GUIHeight
+    if (actualHeight < MinRequiredHeight)
+        actualHeight := MinRequiredHeight
+    ; --- 5. 坐标计算与圆角渲染 ---
+    SysGet, Mon, MonitorWorkArea
+    DPIScale := A_ScreenDPI / 96
+    RealW := Round(HoverPanel_Width * DPIScale)
+    RealH := Round(actualHeight * DPIScale)
+    RealRgn := Round(15 * DPIScale)
+
+    if (GuiExists) {
+        ; 窗口存在时，绝对锁定它的老位置，再也不会乱跑
+        WinGetPos, px, py,,, ahk_id %hHoverPanel%
+    } else {
+        ; ▼▼▼ 修改：如果有强制重建前保存的坐标，则原地恢复，防止弹回悬浮球 ▼▼▼
+        if (savedPX != "" && savedPY != "") {
+            px := savedPX
+            py := savedPY
+        } else {
+            WinGetPos, bx, by, bw, bh, ahk_id %hBall%
+            px := bx + bw + 10
+            py := by
+            if (px + RealW > MonRight)  ; 【修复】使用真实物理宽度判断，防止越界
+                px := bx - RealW - 10
+        }
+        ; ▲▲▲ ========================================================== ▲▲▲
+    }
+    if (py + RealH > MonBottom)     ; 【修复】使用真实物理高度判断，防止越界
+        py := MonBottom - RealH
+
+    ; 【修复】带 DPI 缩放的圆角裁切
+    SetWindowRgn(hHoverPanel, RealW, RealH, RealRgn)
+
+    if (!GuiExists) {
+        ; ▼▼▼ 核心修复：先换算回逻辑坐标安抚 AHK，再用物理坐标精准定位 ▼▼▼
+        logX := Round(px / DPIScale)
+        logY := Round(py / DPIScale)
+
+        ; 告诉 AHK 初始位置，防止它自作主张居中
+        Gui, HoverPanel: Show, Hide x%logX% y%logY% w%HoverPanel_Width% h%actualHeight%
+        Gui, HoverPanel: Show, NoActivate
+
+        ; 强制使用物理像素进行微调覆盖，确保高分屏下边缘无缝贴合
+        WinMove, ahk_id %hHoverPanel%,, %px%, %py%, %RealW%, %RealH%
+        HoverPanelVisible := true
+        ; ▲▲▲ ======================================================== ▲▲▲
+    } else {
+        ; 无缝拉伸/缩短窗口底边 (WinMove 必须使用物理尺寸)
+        WinMove, ahk_id %hHoverPanel%,, %px%, %py%, %RealW%, %RealH%
+    }
+}
+
+; 图钉锁定切换事件
+ToggleHoverPanelPin:
+    Gui, HoverPanel: Default
+    isHoverPanelPinned := !isHoverPanelPinned
+
+    newPinColor := isHoverPanelPinned ? "c00FF66" : "c" HoverPanel_FontColor
+
+    ; 【修复】：同样补全字体参数并强制重绘
+    Gui, Font, s10 w700 %newPinColor%, 微软雅黑
+    GuiControl, Font, HP_PinBtn
+    GuiControl, MoveDraw, HP_PinBtn
+return
+
+; ==============================================================================
+; 动作项目点击分发器 (已去除错误 ToolTip 提示)
+; ==============================================================================
+OnHoverItemClick:
+    ToolTip ; 清除悬停提示
+    SetTimer, ShowHoverTooltip, Off
+
+    ; 从触发的控件名中提取当前点击的项目索引
+    itemIdx := RegExReplace(A_GuiControl, "\D", "")
+    item := HoverItemsData[itemIdx]
+
+    CoordMode, Mouse, Screen
+    MouseGetPos, startX, startY
+    isDragging := false
+    dragTargetIdx := itemIdx
+    isValidZone := true
+
+    ; 【预处理】：提取当前所有有效的分组名，用于跨分组检测
+    uniqueGroups := {}
+    for i, itm in HoverItemsData {
+        if (itm.Group != "")
+            uniqueGroups[itm.Group] := true
+    }
+
+    WinGetPos, wx, wy, ww, wh, ahk_id %hHoverPanel%
+
+    ; 动态计算当前分组所有菜单项的整体显示边界
+    minY := 99999, maxY := 0, minX := 99999, maxX := 0
+    for idx, testItem in HoverItemsData {
+        if (testItem.Group != CurrentHoverGroup)
+            continue
+        if (testItem.RenderY != "" && testItem.RenderY < minY)
+            minY := testItem.RenderY
+        if (testItem.RenderY != "" && testItem.RenderY + HoverPanel_ItemHeight > maxY)
+            maxY := testItem.RenderY + HoverPanel_ItemHeight
+        if (testItem.RenderX != "" && testItem.RenderX < minX)
+            minX := testItem.RenderX
+        if (testItem.RenderX != "" && testItem.RenderX + HoverPanel_ItemWidth > maxX)
+            maxX := testItem.RenderX + HoverPanel_ItemWidth
+    }
+
+    Gui, HoverDrag: Destroy
+    Gui, HoverDrag: +AlwaysOnTop -Caption +ToolWindow +E0x20 +Owner%hHoverPanel%
+    Gui, HoverDrag: Color, % HoverPanel_BgColor ? HoverPanel_BgColor : G_BgColor
+    Gui, HoverDrag: Font, % "s" HoverPanel_FontSize " c" HoverPanel_FontColor, %HoverPanel_FontName%
+    Gui, HoverDrag: Add, Text, x8 y6, % "📦 " item.Text
+
+    While GetKeyState("LButton", "P") {
+        MouseGetPos, curX, curY, curWin, curCtrlHwnd, 2
+
+        if (!isDragging && (Abs(curX - startX) > 5 || Abs(curY - startY) > 5)) {
+            isDragging := true
+            Gui, HoverDrag: Show, % "x" (curX + 12) " y" (curY + 12) " w140 h32 NA"
+            if (HoverPanel_EnableHoverHighlight = "1")
+                GuiControl, HoverPanel: Show, HPHighlight
+        }
+
+        if (isDragging) {
+            Gui, HoverDrag: Show, % "x" (curX + 12) " y" (curY + 12) " NA"
+
+            ControlGetText, ctrlText, , ahk_id %curCtrlHwnd%
+            ctrlText := Trim(ctrlText)
+
+            ; 【跨分组判定】
+            if (curWin == hHoverPanel && uniqueGroups.HasKey(ctrlText) && ctrlText != CurrentHoverGroup) {
+                targetGrp := ctrlText
+
+                itemToMove := HoverItemsData.RemoveAt(itemIdx)
+                itemToMove.Group := targetGrp
+
+                insertPos := HoverItemsData.MaxIndex() + 1
+                for i, testItm in HoverItemsData {
+                    if (testItm.Group == targetGrp)
+                        insertPos := i + 1
+                }
+                HoverItemsData.InsertAt(insertPos, itemToMove)
+
+                cfgPath := A_ScriptDir "\HoverItems.txt"
+                newContent =
+                (LTrim
+                ; ============================================================
+                ; 悬停面板配置说明 (一行一个动作)
+                ; 格式：图标(可纯文本或文件路径)|文字|分组名|功能类型|功能参数|备注
+                ; ============================================================
+                )
+                newContent .= "`n"
+                for i, itm in HoverItemsData {
+                    newContent .= EscapeHoverData(itm.Icon) "|" EscapeHoverData(itm.Text) "|" EscapeHoverData(itm.Group) "|" itm.Type "|" EscapeHoverData(itm.Param) "|" EscapeHoverData(itm.Remark) "`n"
+                }
+                FileDelete, %cfgPath%
+                FileAppend, %newContent%, %cfgPath%, UTF-8
+
+                LoadHoverItems()
+                CurrentHoverGroup := targetGrp
+                ; ▼▼▼ 修改：强制重建 ▼▼▼
+                RenderHoverPanel(CurrentHoverGroup, true)
+
+                itemIdx := insertPos
+                dragTargetIdx := insertPos
+                item := HoverItemsData[itemIdx]
+
+                WinGetPos, wx, wy, ww, wh, ahk_id %hHoverPanel%
+                minY := 99999, maxY := 0, minX := 99999, maxX := 0
+                for idx, testItem in HoverItemsData {
+                    if (testItem.Group != CurrentHoverGroup)
+                        continue
+                    if (testItem.RenderY != "" && testItem.RenderY < minY)
+                        minY := testItem.RenderY
+                    if (testItem.RenderY != "" && testItem.RenderY + HoverPanel_ItemHeight > maxY)
+                        maxY := testItem.RenderY + HoverPanel_ItemHeight
+                    if (testItem.RenderX != "" && testItem.RenderX < minX)
+                        minX := testItem.RenderX
+                    if (testItem.RenderX != "" && testItem.RenderX + HoverPanel_ItemWidth > maxX)
+                        maxX := testItem.RenderX + HoverPanel_ItemWidth
+                }
+
+                if (HoverPanel_EnableHoverHighlight = "1")
+                    GuiControl, HoverPanel: Hide, HPHighlight
+
+                isValidZone := true
+                Sleep, 100
+                Continue
+            }
+
+            relX := curX - wx
+            relY := curY - wy
+            isOverGroupTab := (curWin == hHoverPanel && uniqueGroups.HasKey(ctrlText))
+
+            ; 【移除非法区域 ToolTip，只保留静默隐藏高亮条】
+            if (!isOverGroupTab && (curX < wx || curX > wx + ww || curY < wy || curY > wy + wh || relY < minY || relY > maxY || relX < minX || relX > maxX)) {
+                if (isValidZone) {
+                    isValidZone := false
+                    if (HoverPanel_EnableHoverHighlight = "1")
+                        GuiControl, HoverPanel: Hide, HPHighlight
+                }
+            }
+            else {
+                if (!isValidZone)
+                    isValidZone := true
+
+                if (isOverGroupTab) {
+                    if (HoverPanel_EnableHoverHighlight = "1")
+                        GuiControl, HoverPanel: Hide, HPHighlight
+                } else {
+                    hoveredIdx := dragTargetIdx
+                    for idx, testItem in HoverItemsData {
+                        if (testItem.Group != CurrentHoverGroup)
+                            continue
+                        ix := testItem.RenderX
+                        iy := testItem.RenderY
+                        iw := HoverPanel_ItemWidth
+                        ih := HoverPanel_ItemHeight
+
+                        if (relX >= ix && relX <= ix + iw && relY >= iy && relY <= iy + ih) {
+                            hoveredIdx := idx
+                            break
+                        }
+                    }
+
+                    if (hoveredIdx != dragTargetIdx) {
+                        dragTargetIdx := hoveredIdx
+                        hX := HoverItemsData[hoveredIdx].RenderX
+                        hY := HoverItemsData[hoveredIdx].RenderY
+                        if (HoverPanel_EnableHoverHighlight = "1" && hX != "" && hY != "") {
+                            GuiControl, HoverPanel: Show, HPHighlight
+                            GuiControl, HoverPanel: Move, HPHighlight, % "x" hX " y" hY
+                        }
+                    }
+                }
+            }
+        }
+        Sleep, 15
+    }
+
+    Gui, HoverDrag: Destroy
+
+    if (isDragging) {
+        if (HoverPanel_EnableHoverHighlight = "1")
+            GuiControl, HoverPanel: Hide, HPHighlight
+
+        if (isValidZone && dragTargetIdx != itemIdx) {
+            itemToMove := HoverItemsData.RemoveAt(itemIdx)
+            HoverItemsData.InsertAt(dragTargetIdx, itemToMove)
+
+            cfgPath := A_ScriptDir "\HoverItems.txt"
+            newContent =
+            (LTrim
+            ; ============================================================
+            ; 悬停面板配置说明 (一行一个动作)
+            ; 格式：图标(可纯文本或文件路径)|文字|分组名|功能类型|功能参数|备注
+            ; ============================================================
+            )
+            newContent .= "`n"
+            for i, itm in HoverItemsData {
+                newContent .= EscapeHoverData(itm.Icon) "|" EscapeHoverData(itm.Text) "|" EscapeHoverData(itm.Group) "|" itm.Type "|" EscapeHoverData(itm.Param) "|" EscapeHoverData(itm.Remark) "`n"
+            }
+            FileDelete, %cfgPath%
+            FileAppend, %newContent%, %cfgPath%, UTF-8
+
+            ToolTip, ✅ 排序已更新
+            SetTimer, RemoveToolTip, -1500
+
+            LoadHoverItems()
+            RenderHoverPanel(CurrentHoverGroup)
+        }
+        return
+    }
+
+    if (isHoverPanelEditMode) {
+        Gui, HoverPanel: Default
+        if (HoverPanelSelectedItems.HasKey(itemIdx)) {
+            HoverPanelSelectedItems.Delete(itemIdx)
+            Gui, Font, % "s" HoverPanel_FontSize " w400 c" HoverPanel_FontColor, %HoverPanel_FontName%
+        } else {
+            HoverPanelSelectedItems[itemIdx] := true
+            Gui, Font, % "s" HoverPanel_FontSize " w400 cFF5555", %HoverPanel_FontName%
+        }
+        GuiControl, Font, HPItem_%itemIdx%
+        GuiControl, MoveDraw, HPItem_%itemIdx%
+        return
+    }
+
+    if (!isHoverPanelPinned) {
+        Gui, HoverPanel: Destroy
+        HoverPanelVisible := false
+    }
+    ExecuteAction("1", item.Type, item.Param)
+return
+
+; ==============================================================================
+; 分组栏点击分发器 (已整合横向拖拽排序)
+; ==============================================================================
+HoverPanelSwitchGroup:
+    ToolTip ; 清除悬停提示
+    SetTimer, ShowHoverTooltip, Off
+
+    ; 获取被点击的分组名和索引
+    grpIdx := RegExReplace(A_GuiControl, "\D", "")
+    draggedGrpName := HoverGroups[grpIdx]
+
+    CoordMode, Mouse, Screen
+    MouseGetPos, startX, startY
+    isDragging := false
+    dragTargetIdx := grpIdx
+    isValidZone := true
+
+    WinGetPos, wx, wy, ww, wh, ahk_id %hHoverPanel%
+
+    ; 动态计算分组栏的极值边界，并记录每个标签的实际位置
+    minY := 99999, maxY := 0, minX := 99999, maxX := 0
+    GrpPos := []
+    for i, gName in HoverGroups {
+        GuiControlGet, pos, Pos, HPGrp_%i%
+        GrpPos[i] := {x: posX, y: posY, w: posW, h: posH}
+        if (posY < minY)
+            minY := posY
+        if (posY + posH > maxY)
+            maxY := posY + posH
+        if (posX < minX)
+            minX := posX
+        if (posX + posW > maxX)
+            maxX := posX + posW
+    }
+    ; 稍微放宽 Y 轴容错，防止手抖出界
+    minY -= 15
+    maxY += 15
+
+    ; 创建分组的影子跟手窗体
+    Gui, GrpDrag: Destroy
+    Gui, GrpDrag: +AlwaysOnTop -Caption +ToolWindow +E0x20 +Owner%hHoverPanel%
+    Gui, GrpDrag: Color, % HoverPanel_BgColor ? HoverPanel_BgColor : G_BgColor
+    Gui, GrpDrag: Font, s10 w700 c00CCFF, 微软雅黑
+    Gui, GrpDrag: Add, Text, x8 y6, % draggedGrpName
+
+    While GetKeyState("LButton", "P") {
+        MouseGetPos, curX, curY
+
+        if (!isDragging && (Abs(curX - startX) > 5 || Abs(curY - startY) > 5)) {
+            isDragging := true
+            Gui, GrpDrag: Show, % "x" (curX + 12) " y" (curY + 12) " h32 NA"
+        }
+
+        if (isDragging) {
+            Gui, GrpDrag: Show, % "x" (curX + 12) " y" (curY + 12) " NA"
+
+            relX := curX - wx
+            relY := curY - wy
+
+            ; 限制拖拽必须在分组栏这一行移动
+            if (curX < wx || curX > wx + ww || relY < minY || relY > maxY) {
+                isValidZone := false
+            } else {
+                isValidZone := true
+
+                ; 探测鼠标目前悬停在哪个分组上
+                hoveredIdx := dragTargetIdx
+                for i, pos in GrpPos {
+                    if (relX >= pos.x - 5 && relX <= pos.x + pos.w + 5 && relY >= pos.y - 10 && relY <= pos.y + pos.h + 10) {
+                        hoveredIdx := i
+                        break
+                    }
+                }
+
+                if (hoveredIdx != dragTargetIdx) {
+                    dragTargetIdx := hoveredIdx
+                }
+            }
+        }
+        Sleep, 15
+    }
+
+    Gui, GrpDrag: Destroy
+
+    if (isDragging) {
+        if (isValidZone && dragTargetIdx != grpIdx) {
+            ; 1. 交换分组名称
+            grpToMove := HoverGroups.RemoveAt(grpIdx)
+            HoverGroups.InsertAt(dragTargetIdx, grpToMove)
+
+            ; 2. 依据新的分组顺序，整体重组底层数据数组...
+            NewHoverItemsData := []
+            for _, gName in HoverGroups {
+                for _, itm in HoverItemsData {
+                    if (itm.Group == gName)
+                        NewHoverItemsData.Push(itm)
+                }
+            }
+            HoverItemsData := NewHoverItemsData
+
+            ; 3. 重写到文本文件保存
+            cfgPath := A_ScriptDir "\HoverItems.txt"
+            newContent =
+            (LTrim
+            ; ============================================================
+            ; 悬停面板配置说明 (一行一个动作)
+            ; 格式：图标(可纯文本或文件路径)|文字|分组名|功能类型|功能参数|备注
+            ; ============================================================
+            )
+            newContent .= "`n"
+            for i, itm in HoverItemsData {
+                newContent .= EscapeHoverData(itm.Icon) "|" EscapeHoverData(itm.Text) "|" EscapeHoverData(itm.Group) "|" itm.Type "|" EscapeHoverData(itm.Param) "|" EscapeHoverData(itm.Remark) "`n"
+            }
+            FileDelete, %cfgPath%
+            FileAppend, %newContent%, %cfgPath%, UTF-8
+
+            ToolTip, ✅ 分组排序已更新
+            SetTimer, RemoveToolTip, -1500
+
+            LoadHoverItems()
+
+            ; ▼▼▼ 修改：拖拽交换成功后，强制重建面板，修复文本宽度截断BUG ▼▼▼
+            CurrentHoverGroup := draggedGrpName
+            RenderHoverPanel(CurrentHoverGroup, true)
+            return
+        }
+
+        ; 拖拽完成（无论是否成功改变位置），确保展示当前被拖拽的组
+        CurrentHoverGroup := draggedGrpName
+        RenderHoverPanel(CurrentHoverGroup)
+        return
+    }
+
+    ; 原有的常规点击切换逻辑
+    GuiControlGet, clickedText,, %A_GuiControl%
+    if (clickedText = CurrentHoverGroup)
+        return
+    CurrentHoverGroup := clickedText
+    RenderHoverPanel(CurrentHoverGroup)
+return
+
+; ==============================================================================
+; 新增：悬停面板全局拖放接管引擎 (支持文件、网址、文本智能解析与落地)
+; ==============================================================================
+HoverPanelAddFromDrop(DropData, DropType, ExtractedTitle:="") {
+    global CurrentHoverGroup
+    if (CurrentHoverGroup = "")
+        CurrentHoverGroup := "默认"
+
+    AddedCount := 0
+    cfgPath := A_ScriptDir "\HoverItems.txt"
+
+    ; 保护机制：读取当前文件末尾，确保追加内容不会和上一行粘连
+    FileRead, currentContent, %cfgPath%
+    if (currentContent != "" && SubStr(currentContent, 0) != "`n")
+        FileAppend, `n, %cfgPath%, UTF-8
+
+    if (DropType = "File") {
+        Loop, Parse, DropData, `n, `r
+        {
+            if (A_LoopField = "")
+                continue
+            SplitPath, A_LoopField, fileName, filedir, fileext, filename_no_ext
+            ; 【修改】：进行转义
+            appendLine := EscapeHoverData(A_LoopField) . "|" . EscapeHoverData(filename_no_ext) . "|" . EscapeHoverData(CurrentHoverGroup) . "|1|" . EscapeHoverData(A_LoopField) . "|拖入文件添加`n"
+            FileAppend, %appendLine%, %cfgPath%, UTF-8
+            AddedCount++
+        }
+    }
+    else if (DropType = "Text") {
+        DropData := Trim(DropData, "`r`n`t ")
+        if (DropData = "")
+            return
+
+        isUrl := false
+        if RegExMatch(DropData, "i)^(https?://|www\.)[^\r\n]+$")
+            isUrl := true
+        else if (ExtractedTitle != "" && RegExMatch(DropData, "i)^(https?://|www\.)"))
+            isUrl := true
+
+        if (isUrl) {
+            icon := "🌐"
+            title := ExtractedTitle != "" ? ExtractedTitle : RegExReplace(DropData, "^https?://(www\.)?", "")
+            if (ExtractedTitle == "" && StrLen(title) > 18)
+                title := SubStr(title, 1, 15) . "..."
+            type := "1"
+
+            ; 【修改】：进行转义
+            appendLine := icon . "|" . EscapeHoverData(title) . "|" . EscapeHoverData(CurrentHoverGroup) . "|" . type . "|" . EscapeHoverData(DropData) . "|拖拽网址添加`n"
+            FileAppend, %appendLine%, %cfgPath%, UTF-8
+            AddedCount++
+        }
+        else {
+            TargetDir := A_ScriptDir "\Dropped"
+            if !InStr(FileExist(TargetDir), "D")
+                FileCreateDir, %TargetDir%
+
+            FormatTime, timeStr,, yyyyMMdd_HHmmss
+            fileName := "HoverText_" timeStr "_" A_TickCount ".txt"
+
+            txtFileAbs := TargetDir "\" fileName
+            txtFileRel := "Dropped\" fileName
+
+            FileAppend, %DropData%, %txtFileAbs%, UTF-8
+
+            previewText := RegExReplace(DropData, "[\r\n]+", " ")
+            title := SubStr(previewText, 1, 12)
+            if (StrLen(previewText) > 12)
+                title .= "..."
+
+            icon := "📝"
+            type := "1"
+
+            ; 【修改】：进行转义
+            appendLine := icon . "|" . EscapeHoverData(title) . "|" . EscapeHoverData(CurrentHoverGroup) . "|" . type . "|" . EscapeHoverData(txtFileRel) . "|拖拽文本落地添加`n"
+            FileAppend, %appendLine%, %cfgPath%, UTF-8
+            AddedCount++
+        }
+    }
+
+    if (AddedCount > 0) {
+        LoadHoverItems()
+        RenderHoverPanel(CurrentHoverGroup, true) ; 强制重建刷新界面
+        ToolTip, 成功添加项目到「%CurrentHoverGroup%」！
+        SetTimer, RemoveToolTip, -2500
+    }
+}
+
+; ==============================================================================
+; 悬停面板专属拖拽逻辑 (无视焦点抢夺)
+; ==============================================================================
+HoverPanelDrag:
+    ; 直接精准抓取悬停面板的句柄 hHoverPanel 进行拖拽，而不使用 A (ActiveWindow)
+    PostMessage, 0xA1, 2,,, ahk_id %hHoverPanel%
+return
+; ==============================================================================
+; 悬停面板右键菜单与批量删除核心逻辑
+; ==============================================================================
+HoverPanelGuiContextMenu:
+    ; 【检测是否右键点击了顶部“分组标签”】
+    if RegExMatch(A_GuiControl, "^HPGrp_(\d+)$", match) {
+        global RClickGrpIdx := match1
+        Menu, HoverGrpMenu, Add
+        Menu, HoverGrpMenu, DeleteAll
+
+        Menu, HoverGrpMenu, Add, 重命名分组, RenameHoverGroup
+        Menu, HoverGrpMenu, Icon, 重命名分组, shell32.dll, 133 ; 使用系统编辑图标
+
+        Menu, HoverGrpMenu, Add, 删除该分组, DeleteHoverGroup
+        Menu, HoverGrpMenu, Icon, 删除该分组, shell32.dll, 132 ; 使用系统删除图标
+
+        Menu, HoverGrpMenu, Show
+        return
+    }
+
+    ; 【检测是否右键点击了“动作项目”】
+    if RegExMatch(A_GuiControl, "^HP(Pic|Ico|Item)_(\d+)$", match) {
+        global RClickItemIdx := match2
+        Menu, HoverItemMenu, Add
+        Menu, HoverItemMenu, DeleteAll
+
+        ; 👇 新增：在此项后面新建菜单项
+        Menu, HoverItemMenu, Add, 新建菜单项, AddHoverItemSingle
+        Menu, HoverItemMenu, Icon, 新建菜单项, shell32.dll, 114
+        Menu, HoverItemMenu, Add ; 分割线
+
+        Menu, HoverItemMenu, Add, 编辑此项, EditHoverItemSingle
+        Menu, HoverItemMenu, Icon, 编辑此项, shell32.dll, 133
+
+        Menu, HoverItemMenu, Add, 删除此项 (单删), DeleteHoverItemSingle
+        Menu, HoverItemMenu, Icon, 删除此项 (单删), shell32.dll, 132
+        Menu, HoverItemMenu, Add ; 分割线
+
+        Menu, HoverItemMenu, Add, 进入批量删除模式, EnterHoverBatchDeleteMode
+        Menu, HoverItemMenu, Icon, 进入批量删除模式, shell32.dll, 238
+
+        Menu, HoverItemMenu, Show
+        return ; 拦截结束
+    }
+
+    ; 👇 【新增】：检测是否右键点击了面板的空白区域或辅助线
+    if (A_GuiControl = "" || RegExMatch(A_GuiControl, "^(HPEmptyText|HP_Line|HP_DragBar1|HP_DragBar2|HPHighlight)$")) {
+        global RClickItemIdx := 0 ; 设为0代表插入到当前分组的最后面
+        Menu, HoverBgMenu, Add
+        Menu, HoverBgMenu, DeleteAll
+
+        Menu, HoverBgMenu, Add, 新建菜单项, AddHoverItemSingle
+        Menu, HoverBgMenu, Icon, 新建菜单项, shell32.dll, 114
+
+        Menu, HoverBgMenu, Show
+        return
+    }
+return
+RenameHoverGroup:
+    oldGrpName := HoverGroups[RClickGrpIdx]
+    ; 【新增锁定逻辑】：记录当前是否被图钉固定，然后强制锁定，防止鼠标移出导致面板自动销毁
+    tempPinStatus := isHoverPanelPinned
+    isHoverPanelPinned := true
+
+    ; 【核心新增】：声明后续弹出的 MsgBox/InputBox 归属于悬停面板，强制显示在其上层
+    Gui, HoverPanel: +OwnDialogs
+    ; 弹出输入框要求输入新名称
+    InputBox, newGrpName, 重命名分组, 请输入「%oldGrpName%」的新名称：, , 300, 150, , , , , %oldGrpName%
+
+    ; 【新增还原逻辑】：无论用户是点击了确定还是取消，第一时间还原先前的图钉状态
+    isHoverPanelPinned := tempPinStatus
+
+    if ErrorLevel
+        return
+
+    newGrpName := Trim(newGrpName)
+
+    ; 如果为空或者没修改，则直接退出
+    if (newGrpName = "" || newGrpName = oldGrpName)
+        return
+
+    ; 检查是否与现有分组重名，防止数据混乱
+    for k, v in HoverGroups {
+        if (v = newGrpName) {
+            MsgBox, 48, 提示, 分组名「%newGrpName%」已存在，请换一个名称！
+            return
+        }
+    }
+
+    ; 1. 更新内存中的分组名
+    HoverGroups[RClickGrpIdx] := newGrpName
+
+    ; 2. 遍历所有动作项目，将旧分组名替换为新分组名
+    for idx, itm in HoverItemsData {
+        if (itm.Group = oldGrpName)
+            itm.Group := newGrpName
+    }
+
+    ; 3. 重新拼接并覆盖写入 HoverItems.txt 配置文件
+    cfgPath := A_ScriptDir "\HoverItems.txt"
+    newContent =
+    (LTrim
+    ; ============================================================
+    ; 悬停面板配置说明 (一行一个动作)
+    ; 格式：图标(可纯文本或文件路径)|文字|分组名|功能类型|功能参数|备注
+    ; ============================================================
+    )
+    newContent .= "`n"
+    for i, itm in HoverItemsData {
+        newContent .= EscapeHoverData(itm.Icon) "|" EscapeHoverData(itm.Text) "|" EscapeHoverData(itm.Group) "|" itm.Type "|" EscapeHoverData(itm.Param) "|" EscapeHoverData(itm.Remark) "`n"
+    }
+    FileDelete, %cfgPath%
+    FileAppend, %newContent%, %cfgPath%, UTF-8
+
+    ToolTip, ✅ 分组已重命名为「%newGrpName%」
+    SetTimer, RemoveToolTip, -1500
+
+    ; 4. 重新加载数据并强制重建整个悬停面板 UI，防止文字宽度截断 BUG
+    LoadHoverItems()
+    CurrentHoverGroup := newGrpName
+    RenderHoverPanel(CurrentHoverGroup, true)
+return
+
+; ==============================================================================
+; 新增功能：删除整个分组及其包含的所有动作项
+; ==============================================================================
+DeleteHoverGroup:
+    delGrpName := HoverGroups[RClickGrpIdx]
+
+    ; 临时锁定面板防止因弹窗失去焦点而关闭
+    tempPinStatus := isHoverPanelPinned
+    isHoverPanelPinned := true
+    Gui, HoverPanel: +OwnDialogs
+
+    MsgBox, 292, 警告, 确定要删除分组「%delGrpName%」及其包含的所有动作项目吗？`n此操作不可逆！
+
+    isHoverPanelPinned := tempPinStatus
+
+    IfMsgBox, No
+        return
+
+    ; 1. 过滤掉被删除分组下的所有项目，重组数据
+    NewHoverItemsData := []
+    for idx, itm in HoverItemsData {
+        if (itm.Group != delGrpName)
+            NewHoverItemsData.Push(itm)
+    }
+    HoverItemsData := NewHoverItemsData
+
+    ; 2. 从分组列表中移除
+    HoverGroups.RemoveAt(RClickGrpIdx)
+
+    ; 3. 将新数据写回配置文件
+    cfgPath := A_ScriptDir "\HoverItems.txt"
+    newContent =
+    (LTrim
+    ; ============================================================
+    ; 悬停面板配置说明 (一行一个动作)
+    ; 格式：图标(可纯文本或文件路径)|文字|分组名|功能类型|功能参数|备注
+    ; ============================================================
+    )
+    newContent .= "`n"
+    for i, itm in HoverItemsData {
+        newContent .= EscapeHoverData(itm.Icon) "|" EscapeHoverData(itm.Text) "|" EscapeHoverData(itm.Group) "|" itm.Type "|" EscapeHoverData(itm.Param) "|" EscapeHoverData(itm.Remark) "`n"
+    }
+    FileDelete, %cfgPath%
+    FileAppend, %newContent%, %cfgPath%, UTF-8
+
+    ToolTip, ✅ 分组「%delGrpName%」已删除
+    SetTimer, RemoveToolTip, -1500
+
+    ; 4. 重新加载并刷新 UI
+    LoadHoverItems()
+
+    ; 如果当前分组被删，尝试跳转到第一个分组，若全空则默认回到“默认”分组
+    if (HoverGroups.MaxIndex() > 0)
+        CurrentHoverGroup := HoverGroups[1]
+    else
+        CurrentHoverGroup := "默认"
+
+    RenderHoverPanel(CurrentHoverGroup, true)
+return
+
+; ==============================================================================
+; 新增功能：新建/编辑 单个菜单项 (精美 GUI 公用核心)
+; ==============================================================================
+AddHoverItemSingle:
+    global tempPinStatus := isHoverPanelPinned
+    isHoverPanelPinned := true
+    global IsNewHoverItem := true
+    global EditorTitle := "✨ 新建菜单项"
+
+    ; 初始化为空白和默认状态
+    global EditItm_Icon := "📝"
+    global EditItm_Text := "新建动作"
+    global EditItm_Group := CurrentHoverGroup
+    global EditItm_Type := "1"
+    global EditItm_Param := ""
+    global EditItm_Remark := "手动新建"
+
+    GoSub, BuildHoverItemEditor
+return
+
+EditHoverItemSingle:
+    global tempPinStatus := isHoverPanelPinned
+    isHoverPanelPinned := true
+    global IsNewHoverItem := false
+    global EditorTitle := "📝 编辑菜单项"
+
+    ; 提取当前待编辑项目的属性
+    itm := HoverItemsData[RClickItemIdx]
+    global EditItm_Icon := itm.Icon
+    global EditItm_Text := itm.Text
+    global EditItm_Group := itm.Group
+    global EditItm_Type := itm.Type
+    global EditItm_Param := itm.Param
+    global EditItm_Remark := itm.Remark
+
+    GoSub, BuildHoverItemEditor
+return
+
+BuildHoverItemEditor:
+    Gui, HoverItemEditor: Destroy
+    Gui, HoverItemEditor: -Caption +AlwaysOnTop +OwnerHoverPanel +HwndhHoverItemEditor
+    Gui, HoverItemEditor: Color, %G_BgColor%
+    Gui, HoverItemEditor: Margin, 20, 20
+
+    ; 【修改】：高度从 400 增加到 430，为多行输入框留出空间
+    W := 420, H := 430
+
+    DPIScale := A_ScreenDPI / 96
+    RealW := Round(W * DPIScale)
+    RealH := Round(H * DPIScale)
+    RealRgn := Round(15 * DPIScale)
+    SetWindowRgn(hHoverItemEditor, RealW, RealH, RealRgn)
+    DrawRoundedBackground_API(hHoverItemEditor, RealW, RealH, RealRgn, G_BgARGB, G_BorderARGB)
+
+    Gui, HoverItemEditor: Font, s12 c%G_FontColor% w700, 微软雅黑
+    Gui, HoverItemEditor: Add, Text, x20 y15 w380 h25 BackgroundTrans gGuiDrag, %EditorTitle%
+
+    Gui, HoverItemEditor: Font, s10 c%G_SubFontColor% w400, 微软雅黑
+
+    Gui, HoverItemEditor: Add, Text, x25 y65 w70 h25, 🖼️ 图 标:
+    Gui, HoverItemEditor: Add, Edit, x100 y60 w290 h25 vEditItm_Icon cBlack, %EditItm_Icon%
+
+    Gui, HoverItemEditor: Add, Text, x25 y115 w70 h25, 🏷️ 文 字:
+    Gui, HoverItemEditor: Add, Edit, x100 y110 w290 h25 vEditItm_Text cBlack, %EditItm_Text%
+
+    Gui, HoverItemEditor: Add, Text, x25 y165 w70 h25, 📁 分 组:
+    Gui, HoverItemEditor: Add, Edit, x100 y160 w290 h25 vEditItm_Group cBlack, %EditItm_Group%
+
+    Gui, HoverItemEditor: Add, Text, x25 y215 w70 h25, ⚡ 类 型:
+    TypeDesc := "1 - 运行程序 / 打开文件夹|2 - 发送按键|3 - 发送文本|4 - 调用RunAny|5 - 内部命令|6 - 执行AHK代码"
+    Gui, HoverItemEditor: Add, DropDownList, x100 y210 w290 vEditItm_TypeChoice Choose%EditItm_Type%, %TypeDesc%
+
+    ; 【修改】：将单行 Edit 改为多行 Multi VScroll，高度设为 50
+    Gui, HoverItemEditor: Add, Text, x25 y265 w70 h25, ⚙️ 参 数:
+    Gui, HoverItemEditor: Add, Edit, x100 y260 w290 h50 Multi VScroll vEditItm_Param cBlack, %EditItm_Param%
+
+    ; 【修改】：下方控件 Y 轴整体下移 25 像素
+    Gui, HoverItemEditor: Add, Text, x25 y340 w70 h25, 📌 备 注:
+    Gui, HoverItemEditor: Add, Edit, x100 y335 w290 h25 vEditItm_Remark cBlack, %EditItm_Remark%
+
+    Gui, HoverItemEditor: Add, Button, x100 y380 w120 h30 Default gSaveHoverItemEdit, 保存
+    Gui, HoverItemEditor: Add, Button, x240 y380 w120 h30 gCancelHoverItemEdit, 取消
+
+    Gui, HoverItemEditor: Show, w%W% h%H% Center, %EditorTitle%
+return
+
+SaveHoverItemEdit:
+    Gui, HoverItemEditor: Submit, NoHide
+
+    RegExMatch(EditItm_TypeChoice, "^\d+", finalType)
+
+    if (Trim(EditItm_Text) = "" || Trim(EditItm_Param) = "") {
+        Gui, HoverItemEditor: +OwnDialogs
+        MsgBox, 48, 提示, 【文字】和【参数】不能为空！
+        return
+    }
+
+    ; 【修改】：移除旧的强行过滤换行符逻辑，允许保留回车
+    cleanParam := Trim(EditItm_Param)
+
+    groupName := Trim(EditItm_Group)
+    if (groupName = "")
+        groupName := "默认"
+
+    if (IsNewHoverItem) {
+        newItem := {}
+        newItem.Icon := Trim(EditItm_Icon)
+        newItem.Text := Trim(EditItm_Text)
+        newItem.Group := groupName
+        newItem.Type := finalType
+        newItem.Param := cleanParam
+        newItem.Remark := Trim(EditItm_Remark)
+
+        if (RClickItemIdx > 0 && HoverItemsData.MaxIndex() != "")
+            HoverItemsData.InsertAt(RClickItemIdx + 1, newItem)
+        else
+            HoverItemsData.Push(newItem)
+
+        NoticeMsg := "✅ 新建菜单项成功！"
+    } else {
+        itm := HoverItemsData[RClickItemIdx]
+        itm.Icon := Trim(EditItm_Icon)
+        itm.Text := Trim(EditItm_Text)
+        itm.Group := groupName
+        itm.Type := finalType
+        itm.Param := cleanParam
+        itm.Remark := Trim(EditItm_Remark)
+
+        NoticeMsg := "✅ 菜单项已更新！"
+    }
+
+    cfgPath := A_ScriptDir "\HoverItems.txt"
+    newContent =
+    (LTrim
+    ; ============================================================
+    ; 悬停面板配置说明 (一行一个动作)
+    ; 格式：图标(可纯文本或文件路径)|文字|分组名|功能类型|功能参数|备注
+    ; ============================================================
+    )
+    newContent .= "`n"
+    for i, itemData in HoverItemsData {
+        ; 【修改】：保存文件时，进行转义编码
+        newContent .= EscapeHoverData(itemData.Icon) "|" EscapeHoverData(itemData.Text) "|" EscapeHoverData(itemData.Group) "|" itemData.Type "|" EscapeHoverData(itemData.Param) "|" EscapeHoverData(itemData.Remark) "`n"
+    }
+    FileDelete, %cfgPath%
+    FileAppend, %newContent%, %cfgPath%, UTF-8
+
+    ToolTip, %NoticeMsg%
+    SetTimer, RemoveToolTip, -1500
+
+    Gui, HoverItemEditor: Destroy
+    isHoverPanelPinned := tempPinStatus
+    RClickItemIdx := 0
+
+    LoadHoverItems()
+    CurrentHoverGroup := groupName
+    RenderHoverPanel(CurrentHoverGroup, true)
+return
+
+CancelHoverItemEdit:
+HoverItemEditorGuiEscape:
+HoverItemEditorGuiClose:
+    Gui, HoverItemEditor: Destroy
+    ; 用户取消时也必须还原图钉状态，避免面板无法关闭
+    isHoverPanelPinned := tempPinStatus
+return
+
+DeleteHoverItemSingle:
+    HoverPanelSelectedItems := {}
+    HoverPanelSelectedItems[RClickItemIdx] := true
+    GoSub, ConfirmHoverBatchDelete ; 复用批量删除核心
+return
+
+EnterHoverBatchDeleteMode:
+    isHoverPanelEditMode := true
+    HoverPanelSelectedItems := {}
+    isHoverPanelPinned := true ; 强制打上图钉，防止点击时面板误关
+    RenderHoverPanel(CurrentHoverGroup)
+return
+
+ExitHoverBatchDeleteMode:
+    isHoverPanelEditMode := false
+    HoverPanelSelectedItems := {}
+    RenderHoverPanel(CurrentHoverGroup)
+return
+
+CloseHoverPanel:
+    ToolTip ; 动作触发/面板关闭时清除悬停提示
+    SetTimer, ShowHoverTooltip, Off
+    DllCall("ole32\RevokeDragDrop", "Ptr", hHoverPanel) ; <--- 新增
+    Gui, HoverPanel: Destroy
+    HoverPanelVisible := false
+    isHoverPanelPinned := false
+return
+
+ConfirmHoverBatchDelete:
+    ; 计算一共选中了多少项
+    delCount := 0
+    for k, v in HoverPanelSelectedItems
+        delCount++
+
+    if (delCount == 0) {
+        GoSub, ExitHoverBatchDeleteMode
+        return
+    }
+
+    tempPinStatus := isHoverPanelPinned
+    isHoverPanelPinned := true
+    Gui, HoverPanel: +OwnDialogs
+
+    MsgBox, 292, 批量删除, % "确定要永久删除选中的 " delCount " 个动作吗？"
+
+    isHoverPanelPinned := tempPinStatus
+    IfMsgBox, No
+        return
+
+    ; 将所有选中的原始文本存入字典，以便比对
+    linesToDelete := {}
+    for idx, _ in HoverPanelSelectedItems {
+        itm := HoverItemsData[idx]
+
+        ; ▼▼▼ 新增：自动清理落地的 txt 垃圾文件 ▼▼▼
+        ; 安全判定：确保是类型1，且路径中包含 Dropped\ 文件夹
+        if (itm.Type = "1" && InStr(itm.Param, "Dropped\")) {
+            ; 双重保险：优先尝试直接删除，如果相对路径不通，则补全脚本目录后删除
+            if FileExist(itm.Param)
+                FileDelete, % itm.Param
+            else if FileExist(A_ScriptDir "\" itm.Param)
+                FileDelete, % A_ScriptDir "\" itm.Param
+        }
+        ; ▲▲▲ ====================================== ▲▲▲
+
+        linesToDelete[itm.LineStr] := true
+    }
+
+    cfgPath := A_ScriptDir "\HoverItems.txt"
+    FileRead, fileContent, *t %cfgPath%
+    newContent := ""
+
+    Loop, Parse, fileContent, `n, `r
+    {
+        ; 如果这一行在待删除字典里，则跳过不写（并删除记录防止完全相同的重名行被误伤多删）
+        if (linesToDelete.HasKey(A_LoopField)) {
+            linesToDelete.Delete(A_LoopField)
+            continue
+        }
+        newContent .= A_LoopField . "`n"
+    }
+
+    ; 清理末尾多余空行并覆写文件
+    newContent := RegExReplace(newContent, "`n$")
+    FileDelete, %cfgPath%
+    FileAppend, %newContent%, %cfgPath%, UTF-8
+
+    ToolTip, % "成功删除 " delCount " 个动作并清理了相关缓存文件！"
+    SetTimer, RemoveToolTip, -2000
+
+    ; 退出模式并刷新界面
+    isHoverPanelEditMode := false
+    HoverPanelSelectedItems := {}
+    LoadHoverItems()
+    ; ▼▼▼ 修改：强制重建 ▼▼▼
+    RenderHoverPanel(CurrentHoverGroup, true)
+return
+
+; ==============================================================================
+; 新增：处理悬停面板的鼠标移动事件（用于触发工具提示）
+; ==============================================================================
+WM_MOUSEMOVE(wParam, lParam, msg, hwnd) {
+    global HoverPanel_ShowTooltip, HoverPanel_TooltipDelay
+    global CurrentTooltipControl, HoverTooltipLastCtrl
+    global HoverItemsData, HoverPanel_EnableHoverHighlight ; 引入高亮开关全局变量
+
+    ; 如果提示和高亮都没开，直接拦截节省性能
+    if (HoverPanel_ShowTooltip != "1" && HoverPanel_EnableHoverHighlight != "1")
+        return
+
+    ; 只处理悬停面板界面的鼠标移动
+    if (A_Gui = "HoverPanel") {
+        ; 【防抖设计】：只有当鼠标跨越到不同的控件时，才执行代码
+        if (A_GuiControl != HoverTooltipLastCtrl) {
+            HoverTooltipLastCtrl := A_GuiControl
+            ToolTip ; 鼠标换了控件，立即清除旧提示
+            SetTimer, ShowHoverTooltip, Off ; 取消待执行的定时器
+
+            ; 判断当前鼠标是否在动作项上 (通过正则匹配控件的 vLabel)
+            if RegExMatch(A_GuiControl, "^HP(Pic|Ico|Item)_(\d+)$", match) {
+                CurrentTooltipControl := match2 ; 记录被悬停的项目索引
+                itemIdx := match2
+
+                ; ▼▼▼ 移动底层高亮色块并显示 ▼▼▼
+                if (HoverPanel_EnableHoverHighlight = "1") {
+                    hX := HoverItemsData[itemIdx].RenderX
+                    hY := HoverItemsData[itemIdx].RenderY
+                    if (hX != "" && hY != "") {
+                        GuiControl, HoverPanel: Move, HPHighlight, % "x" hX " y" hY
+                        GuiControl, HoverPanel: Show, HPHighlight
+
+                        ; 强制重绘顶层的文字和图标，彻底清除抗锯齿产生的透明黑边残影
+                        GuiControl, HoverPanel: MoveDraw, HPPic_%itemIdx%
+                        GuiControl, HoverPanel: MoveDraw, HPIco_%itemIdx%
+                        GuiControl, HoverPanel: MoveDraw, HPItem_%itemIdx%
+                    }
+                }
+
+                ; 启动一次性负数定时器
+                SetTimer, ShowHoverTooltip, % "-" . HoverPanel_TooltipDelay
+
+            } else {
+                CurrentTooltipControl := ""
+
+                ; ▼▼▼ 鼠标离开动作项（或挪到空白处）时，隐藏高亮块 ▼▼▼
+                if (HoverPanel_EnableHoverHighlight = "1") {
+                    GuiControl, HoverPanel: Hide, HPHighlight
+                }
+            }
+        }
+    }
+}
+
+ShowHoverTooltip:
+    global HoverItemsData
+    if (CurrentTooltipControl != "" && HoverPanelVisible) {
+        item := HoverItemsData[CurrentTooltipControl]
+        if (item) {
+            ; 解析动作类型以便更直观地阅读
+            typeDesc := ""
+            if (item.Type = "1")
+                typeDesc := "1-运行程序/打开文件夹"
+            else if (item.Type = "2")
+                typeDesc := "2-发送按键"
+            else if (item.Type = "3")
+                typeDesc := "3-发送文本"
+            else if (item.Type = "4")
+                typeDesc := "4-调用RunAny"
+            else if (item.Type = "5")
+                typeDesc := "5-内部命令"
+            else if (item.Type = "6")
+                typeDesc := "6-执行AHK代码"
+            else
+                typeDesc := item.Type
+
+            ; 拼装多行提示文本
+            tipText := "名称: " item.Text "`n"
+                . "类型: " typeDesc "`n"
+                . "参数: " item.Param "`n"
+                . "备注: " item.Remark
+
+            ToolTip, %tipText%
+        }
+    }
+return
+
+IDropTarget_QueryInterface(this, riid, ppvObj) {
+    NumPut(this, ppvObj+0, "Ptr")
+    return 0 ; S_OK
+}
+IDropTarget_AddRef(this) {
+    return 1
+}
+IDropTarget_Release(this) {
+    return 0
+}
+IDropTarget_DragEnter(this, pDataObj, grfKeyState, p4, p5, p6="") {
+    global hBall, HoverPanel_Enable, HoverPanelVisible, isHoverPanelPinned
+    pdwEffect := (A_PtrSize == 8) ? p5 : p6
+    NumPut(1, pdwEffect+0, "UInt") ; DROPEFFECT_COPY = 1
+
+    ; ▼▼▼ 新增：拖拽文件/文本进入时，自动展开悬停面板 ▼▼▼
+    if (HoverPanel_Enable = "1" && !HoverPanelVisible && !isHoverPanelPinned) {
+        MouseGetPos,,, dragHwnd
+        if (dragHwnd = hBall) {
+            SetTimer, ShowHoverPanelGUI, -10 ; 异步触发防卡顿
+        }
+    }
+    ; ▲▲▲ ================================================= ▲▲▲
+    return 0
+}
+
+IDropTarget_DragOver(this, grfKeyState, p3, p4, p5="") {
+    global hBall, HoverPanel_Enable, HoverPanelVisible, isHoverPanelPinned
+    pdwEffect := (A_PtrSize == 8) ? p4 : p5
+    NumPut(1, pdwEffect+0, "UInt") ; DROPEFFECT_COPY = 1
+
+    ; ▼▼▼ 新增：在悬浮球上持续拖拽游走时，也确保面板保持展开 ▼▼▼
+    if (HoverPanel_Enable = "1" && !HoverPanelVisible && !isHoverPanelPinned) {
+        MouseGetPos,,, dragHwnd
+        if (dragHwnd = hBall) {
+            SetTimer, ShowHoverPanelGUI, -10
+        }
+    }
+    ; ▲▲▲ ================================================= ▲▲▲
+    return 0
+}
+IDropTarget_DragLeave(this) {
+    return 0
+}
+IDropTarget_Drop(this, pDataObj, grfKeyState, p4, p5, p6="") {
+    pdwEffect := (A_PtrSize == 8) ? p5 : p6
+    NumPut(1, pdwEffect+0, "UInt") ; DROPEFFECT_COPY = 1
+
+    ; ▼▼▼ 新增：获取当前释放鼠标时所在的窗口句柄 ▼▼▼
+    MouseGetPos,,, dropHwnd
+
+    ; 核心：解析释放时的 IDataObject 内存数据
+    ParseDataObject(pDataObj, dropHwnd)
+    return 0
+}
+
+; =================================================================
+; 数据解析核心：支持区分主悬浮球和悬停面板，并深度解析浏览器原生标题
+; =================================================================
+ParseDataObject(pDataObj, dropHwnd:="") {
+    global hBall, hHoverPanel
+    IDataObject_GetData := NumGet(NumGet(pDataObj+0, "Ptr") + 3*A_PtrSize, "Ptr")
+
+    ; --- 1. 尝试获取 FileGroupDescriptorW (提取浏览器拖拽的原生网页标题) ---
+    cf_fgd := DllCall("RegisterClipboardFormat", "Str", "FileGroupDescriptorW")
+    VarSetCapacity(FMT_FGD, A_PtrSize == 8 ? 32 : 20, 0)
+    NumPut(cf_fgd, FMT_FGD, 0, "UShort")
+    NumPut(1, FMT_FGD, A_PtrSize == 8 ? 16 : 8, "UInt")   ; DVASPECT_CONTENT
+    NumPut(-1, FMT_FGD, A_PtrSize == 8 ? 20 : 12, "Int")  ; lindex
+    NumPut(1, FMT_FGD, A_PtrSize == 8 ? 24 : 16, "UInt")  ; TYMED_HGLOBAL
+    VarSetCapacity(STG_FGD, A_PtrSize == 8 ? 24 : 12, 0)
+
+    pageTitle := ""
+    if (DllCall(IDataObject_GetData, "Ptr", pDataObj, "Ptr", &FMT_FGD, "Ptr", &STG_FGD) = 0) {
+        hGlobal := NumGet(STG_FGD, A_PtrSize == 8 ? 8 : 4, "Ptr")
+        pData := DllCall("GlobalLock", "Ptr", hGlobal, "Ptr")
+        ; 核心解包：FILEDESCRIPTORW 结构中，文件名固定在偏移 76 字节处
+        pageTitle := StrGet(pData + 76, "UTF-16")
+        pageTitle := RegExReplace(pageTitle, "(?i)\.url$", "") ; 去除结尾的 .url 后缀
+        DllCall("GlobalUnlock", "Ptr", hGlobal)
+        DllCall("ole32\ReleaseStgMedium", "Ptr", &STG_FGD)
+    }
+
+    ; --- 2. 尝试读取 文本/网址 (CF_UNICODETEXT = 13) ---
+    VarSetCapacity(FORMATETC, A_PtrSize == 8 ? 32 : 20, 0)
+    NumPut(13, FORMATETC, 0, "UShort")
+    NumPut(1, FORMATETC, A_PtrSize == 8 ? 16 : 8, "UInt")
+    NumPut(-1, FORMATETC, A_PtrSize == 8 ? 20 : 12, "Int")
+    NumPut(1, FORMATETC, A_PtrSize == 8 ? 24 : 16, "UInt")
+    VarSetCapacity(STGMEDIUM, A_PtrSize == 8 ? 24 : 12, 0)
+
+    if (DllCall(IDataObject_GetData, "Ptr", pDataObj, "Ptr", &FORMATETC, "Ptr", &STGMEDIUM) = 0) {
+        hGlobal := NumGet(STGMEDIUM, A_PtrSize == 8 ? 8 : 4, "Ptr")
+        pData := DllCall("GlobalLock", "Ptr", hGlobal, "Ptr")
+        droppedText := StrGet(pData, "UTF-16")
+        DllCall("GlobalUnlock", "Ptr", hGlobal)
+        DllCall("ole32\ReleaseStgMedium", "Ptr", &STGMEDIUM)
+
+        ; ▼ 分发逻辑 ▼
+        if (dropHwnd = hHoverPanel)
+            HoverPanelAddFromDrop(droppedText, "Text", pageTitle) ; <--- 将原生提取到的标题传进去
+        else
+            OnDropText(droppedText)
+        return
+    }
+
+    ; --- 3. 尝试读取 文件/文件夹 (CF_HDROP = 15) ---
+    NumPut(15, FORMATETC, 0, "UShort")
+    VarSetCapacity(STGMEDIUM, A_PtrSize == 8 ? 24 : 12, 0)
+    if (DllCall(IDataObject_GetData, "Ptr", pDataObj, "Ptr", &FORMATETC, "Ptr", &STGMEDIUM) = 0) {
+        hGlobal := NumGet(STGMEDIUM, A_PtrSize == 8 ? 8 : 4, "Ptr")
+        fileCount := DllCall("shell32\DragQueryFileW", "Ptr", hGlobal, "UInt", 0xFFFFFFFF, "Ptr", 0, "UInt", 0)
+        droppedFiles := ""
+        Loop, % fileCount {
+            len := DllCall("shell32\DragQueryFileW", "Ptr", hGlobal, "UInt", A_Index-1, "Ptr", 0, "UInt", 0)
+            VarSetCapacity(filePath, (len + 1) * 2, 0)
+            DllCall("shell32\DragQueryFileW", "Ptr", hGlobal, "UInt", A_Index-1, "Str", filePath, "UInt", len + 1)
+            droppedFiles .= filePath . "`n"
+        }
+        droppedFiles := RTrim(droppedFiles, "`n")
+        DllCall("ole32\ReleaseStgMedium", "Ptr", &STGMEDIUM)
+
+        ; ▼ 分发逻辑 ▼
+        if (dropHwnd = hHoverPanel)
+            HoverPanelAddFromDrop(droppedFiles, "File")
+        else
+            OnDropFiles(droppedFiles)
+        return
+    }
+}
+
+; ==============================================================================
+; 监听悬停面板大小改变事件，实现内部控件自适应排版与圆角更新
+; ==============================================================================
+HoverPanelGuiSize:
+    if (A_EventInfo = 1) ; 窗口最小化时不处理
+        return
+
+    NewPanelW := A_GuiWidth
+    NewPanelH := A_GuiHeight
+
+    ; 1. 实时更新圆角裁剪区域
+    DPIScale := A_ScreenDPI / 96
+    SetWindowRgn(hHoverPanel, Round(NewPanelW * DPIScale), Round(NewPanelH * DPIScale), Round(15 * DPIScale))
+
+    ; 2. 更新顶部栏各按钮位置 (靠右对齐)
+    GuiControl, Move, HP_Edit_Del, % "x" (NewPanelW - 90)
+    GuiControl, Move, HP_Edit_Cancel, % "x" (NewPanelW - 45)
+    GuiControl, Move, HP_Norm_Close, % "x" (NewPanelW - 32)
+    GuiControl, Move, HP_PinBtn, % "x" (NewPanelW - 55)
+    GuiControl, Move, HP_DragBar1, % "w" (NewPanelW - 120)
+    GuiControl, Move, HP_DragBar2, % "w" (NewPanelW - 60)
+
+    ; 更新右下角拖拽缩放手柄的位置 (扣除变大后的 24 像素)
+    GuiControl, Move, HP_ResizeGrip, % "x" (NewPanelW - 24) " y" (NewPanelH - 24)
+
+    ; 3. 更新分组标签栏 (支持自动换行)
+    ; 修改前: btnX := 12
+    btnX := HoverPanel_Margin
+    btnY := 35
+    for idx, grp in HoverGroups {
+        GuiControlGet, pos, Pos, HPGrp_%idx%
+        if (posW > 0) {
+            ; 修改前: if (btnX + posW > NewPanelW - 12)
+            if (btnX + posW > NewPanelW - HoverPanel_Margin) {
+                ; 修改前: btnX := 12
+                btnX := HoverPanel_Margin
+                btnY += 26
+            }
+            GuiControl, Move, HPGrp_%idx%, x%btnX% y%btnY%
+            ; 修改前: btnX += posW + 12
+            btnX += posW + HoverPanel_Margin
+        }
+    }
+
+    ; 4. 更新分割线与空提示
+    LineY := btnY + 26
+    StartY := LineY + 12
+    GuiControl, Move, HP_Line, % "y" LineY " w" (NewPanelW - 24)
+    GuiControl, Move, HPEmptyText, % "y" StartY " w" (NewPanelW - 24)
+
+    ; 5. 更新所有动作项目 (网格瀑布流排版)
+    ; 修改前: AvailableWidth := NewPanelW - 24
+    AvailableWidth := NewPanelW - (HoverPanel_Margin * 2)
+    Cols := Floor(AvailableWidth / HoverPanel_ItemWidth)
+    if (Cols < 1)
+        Cols := 1
+
+    ItemCount := 0
+    for idx, item in HoverItemsData {
+        if (item.Group = CurrentHoverGroup) {
+            CurRow := Floor(ItemCount / Cols)
+            CurCol := Mod(ItemCount, Cols)
+            ; 修改前: curX := 12 + (CurCol * HoverPanel_ItemWidth)
+            curX := HoverPanel_Margin + (CurCol * HoverPanel_ItemWidth)
+            curY := StartY + (CurRow * HoverPanel_ItemHeight)
+
+            item.RenderX := curX
+            item.RenderY := curY
+
+            textW := HoverPanel_ItemWidth - HoverPanel_IconSize - 8
+            textX := curX + HoverPanel_IconSize + 8
+            textY := curY + (HoverPanel_IconSize/2) - (HoverPanel_FontSize/2) + HoverPanel_TextOffsetY
+
+            ; 瞬间重置位置
+            GuiControl, Move, HPPic_%idx%, x%curX% y%curY%
+            GuiControl, Move, HPIco_%idx%, x%curX% y%curY%
+            GuiControl, Move, HPItem_%idx%, x%textX% y%textY% w%textW%
+
+            if (HoverPanel_EnableHoverHighlight = "1" && CurrentTooltipControl = idx)
+                GuiControl, HoverPanel: Move, HPHighlight, % "x" curX " y" curY
+
+            ItemCount++
+        }
+    }
+
+    ; 6. 更新全局变量，设置防抖定时器保存配置 (延迟800毫秒防止高频写盘)
+    HoverPanel_Width := NewPanelW
+    HoverPanel_GUIHeight := NewPanelH
+    SetTimer, SaveHoverPanelSize, -800
+return
+
+; ==============================================================================
+; 右下角拖拽缩放逻辑 (带动态最小高度限制)
+; ==============================================================================
+HoverPanelResize:
+    CoordMode, Mouse, Screen
+    MouseGetPos, startMX, startMY
+    WinGetPos, winX, winY, winW, winH, ahk_id %hHoverPanel%
+
+    DPIScale := A_ScreenDPI / 96
+
+    While GetKeyState("LButton", "P") {
+        MouseGetPos, curMX, curMY
+        deltaX := curMX - startMX
+        deltaY := curMY - startMY
+
+        PhysicalNewW := winW + deltaX
+        PhysicalNewH := winH + deltaY
+
+        ; 限制绝对最小物理宽度
+        if (PhysicalNewW < 220 * DPIScale)
+            PhysicalNewW := 220 * DPIScale
+
+        ; === 核心：实时模拟计算当前宽度下，所有内容排布所需的最小高度 ===
+        LogicalW := PhysicalNewW / DPIScale
+
+        ; 1. 模拟计算顶部“分组标签栏”换行后的实际高度
+        ; 修改前: btnX := 12
+        btnX := HoverPanel_Margin
+        btnY := 35
+        for idx, grp in HoverGroups {
+            GuiControlGet, pos, Pos, HPGrp_%idx%
+            if (posW > 0) {
+                ; 修改前: if (btnX + posW > LogicalW - 12)
+                if (btnX + posW > LogicalW - HoverPanel_Margin) {
+                    ; 修改前: btnX := 12
+                    btnX := HoverPanel_Margin
+                    btnY += 26
+                }
+                ; 修改前: btnX += posW + 12
+                btnX += posW + HoverPanel_Margin
+            }
+        }
+        StartY := btnY + 38 ; 预留出分割线和间距
+
+        ; 2. 模拟计算“动作项目”网格瀑布流所需的行数
+        ; 修改前: AvailableWidth := LogicalW - 24
+        AvailableWidth := LogicalW - (HoverPanel_Margin * 2)
+        Cols := Floor(AvailableWidth / HoverPanel_ItemWidth)
+        if (Cols < 1)
+            Cols := 1
+
+        ItemCount := 0
+        for idx, item in HoverItemsData {
+            if (item.Group = CurrentHoverGroup)
+                ItemCount++
+        }
+
+        ; 3. 算出逻辑最小高度
+        if (ItemCount = 0) {
+            MinRequiredH := StartY + 40
+        } else {
+            TotalRows := Floor((ItemCount - 1) / Cols) + 1
+            MinRequiredH := StartY + (TotalRows * HoverPanel_ItemHeight)
+        }
+        MinRequiredH += 15 ; 底部边缘留白
+
+        ; 将逻辑高度转换为物理像素高度
+        PhysicalReqH := MinRequiredH * DPIScale
+
+        ; === 碰撞拦截：如果鼠标往上拖的高度小于所需最小高度，则强制锁死底边 ===
+        if (PhysicalNewH < PhysicalReqH)
+            PhysicalNewH := PhysicalReqH
+
+        ; WinMove 实时调整大小，AHK 自动触发 HoverPanelGuiSize 完成平滑重排
+        WinMove, ahk_id %hHoverPanel%,,,, %PhysicalNewW%, %PhysicalNewH%
+        Sleep, 15
+    }
+return
+
+SaveHoverPanelSize:
+    Var_Set(HoverPanel_Width, "330", "Width", "悬停面板", A_ScriptDir "\Settings.ini")
+    Var_Set(HoverPanel_GUIHeight, "300", "GUIHeight", "悬停面板", A_ScriptDir "\Settings.ini")
+return
+
+; ==============================================================================
+; 新增：深浅主题与自定义配色核心加载引擎
+; ==============================================================================
+LoadThemeConfig:
+    ThemeMode := Var_Read("ThemeMode", "Dark", "主题配置", A_ScriptDir "\Settings.ini", "否")
+
+    if (ThemeMode = "Light") {
+        G_BgColor := Var_Read("Light_BgColor", "F3F3F3", "主题配置", A_ScriptDir "\Settings.ini", "否")
+        G_FontColor := Var_Read("Light_FontColor", "000000", "主题配置", A_ScriptDir "\Settings.ini", "否")
+        G_SubFontColor := Var_Read("Light_SubFontColor", "555555", "主题配置", A_ScriptDir "\Settings.ini", "否")
+        G_BgARGB := Var_Read("Light_BgARGB", "0xFFF3F3F3", "主题配置", A_ScriptDir "\Settings.ini", "否")
+        G_BorderARGB := Var_Read("Light_BorderARGB", "0xFFCCCCCC", "主题配置", A_ScriptDir "\Settings.ini", "否")
+
+        ; 覆写悬停面板配色
+        HoverPanel_BgColor := Var_Read("Light_HoverPanelBg", "FFFFFF", "主题配置", A_ScriptDir "\Settings.ini", "否")
+        HoverPanel_FontColor := Var_Read("Light_HoverPanelFont", "000000", "主题配置", A_ScriptDir "\Settings.ini", "否")
+        HoverPanel_HoverBgColor := Var_Read("Light_HoverPanelHighlight", "E0E0E0", "主题配置", A_ScriptDir "\Settings.ini", "否")
+    } else if (ThemeMode = "Custom") {
+        G_BgColor := Var_Read("Custom_BgColor", "2B2B2B", "主题配置", A_ScriptDir "\Settings.ini", "否")
+        G_FontColor := Var_Read("Custom_FontColor", "FFFFFF", "主题配置", A_ScriptDir "\Settings.ini", "否")
+        G_SubFontColor := Var_Read("Custom_SubFontColor", "AAAAAA", "主题配置", A_ScriptDir "\Settings.ini", "否")
+        G_BgARGB := Var_Read("Custom_BgARGB", "0xFF2B2B2B", "主题配置", A_ScriptDir "\Settings.ini", "否")
+        G_BorderARGB := Var_Read("Custom_BorderARGB", "0xFF3D3D3D", "主题配置", A_ScriptDir "\Settings.ini", "否")
+
+        HoverPanel_BgColor := Var_Read("Custom_HoverPanelBg", "2B2B2B", "主题配置", A_ScriptDir "\Settings.ini", "否")
+        HoverPanel_FontColor := Var_Read("Custom_HoverPanelFont", "FFFFFF", "主题配置", A_ScriptDir "\Settings.ini", "否")
+        HoverPanel_HoverBgColor := Var_Read("Custom_HoverPanelHighlight", "404040", "主题配置", A_ScriptDir "\Settings.ini", "否")
+    } else { ; 默认深色 Dark
+        G_BgColor := Var_Read("Dark_BgColor", "2B2B2B", "主题配置", A_ScriptDir "\Settings.ini", "否")
+        G_FontColor := Var_Read("Dark_FontColor", "FFFFFF", "主题配置", A_ScriptDir "\Settings.ini", "否")
+        G_SubFontColor := Var_Read("Dark_SubFontColor", "AAAAAA", "主题配置", A_ScriptDir "\Settings.ini", "否")
+        G_BgARGB := Var_Read("Dark_BgARGB", "0xFF2B2B2B", "主题配置", A_ScriptDir "\Settings.ini", "否")
+        G_BorderARGB := Var_Read("Dark_BorderARGB", "0xFF3D3D3D", "主题配置", A_ScriptDir "\Settings.ini", "否")
+
+        HoverPanel_BgColor := Var_Read("Dark_HoverPanelBg", "2B2B2B", "主题配置", A_ScriptDir "\Settings.ini", "否")
+        HoverPanel_FontColor := Var_Read("Dark_HoverPanelFont", "FFFFFF", "主题配置", A_ScriptDir "\Settings.ini", "否")
+        HoverPanel_HoverBgColor := Var_Read("Dark_HoverPanelHighlight", "404040", "主题配置", A_ScriptDir "\Settings.ini", "否")
+    }
+return
+
+ToggleThemeMode:
+    ThemeMode := (ThemeMode = "Dark") ? "Light" : "Dark"
+    Var_Set(ThemeMode, "Dark", "ThemeMode", "主题配置", A_ScriptDir "\Settings.ini")
+    GoSub, LoadThemeConfig
+
+    ; 立即刷新悬停面板与正在打开的工具栏
+    if (HoverPanelVisible)
+        RenderHoverPanel(CurrentHoverGroup, true)
+
+    ToolTip, % "🎨 主题已切换为: " (ThemeMode = "Dark" ? "深色" : "浅色") "，部分设置界面需重新打开生效。"
+    SetTimer, RemoveToolTip, -2000
+return
+
+; ==============================================================================
+; 悬停面板数据转义与还原函数 (解决 | 与换行符冲突)
+; ==============================================================================
+EscapeHoverData(str) {
+    str := StrReplace(str, "`r`n", "[CRLF]")
+    str := StrReplace(str, "`n", "[CRLF]")
+    str := StrReplace(str, "|", "[PIPE]")
+    return str
+}
+
+UnescapeHoverData(str) {
+    str := StrReplace(str, "[CRLF]", "`n")
+    str := StrReplace(str, "[PIPE]", "|")
+    return str
+}
